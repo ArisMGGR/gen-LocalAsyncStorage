@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Async Storage DOS</string>
+
+    <!-- main screen -->
+    <string name="loading">Loading…</string>
+    <string name="open_settings_hint">Open Settings and enter the server URL and API key.</string>
+    <string name="server_unreachable">Server unreachable: %s</string>
+    <string name="key_rejected">The server rejected the API key — check it in Settings.</string>
+    <string name="settings_bad_url">That isn\'t a server address — e.g. http://192.168.1.50:8000</string>
+    <string name="n_files_live">%d file(s) on the server — live-updating.</string>
+
+    <!-- buttons -->
+    <string name="refresh">Refresh</string>
+    <string name="add_files">Add files</string>
+    <string name="delete">Delete</string>
+    <string name="open_folder">Open folder</string>
+    <string name="upload">Upload</string>
+    <string name="up">⬆ Up</string>
+    <string name="new_folder">New folder</string>
+    <string name="search_hint">Search files…</string>
+    <string name="search_matches">🔍 %1$s — %2$d match(es)</string>
+    <string name="create_action">Create</string>
+    <string name="move_action">Move</string>
+
+    <!-- folders -->
+    <string name="n_files_live_here">%1$d file(s) — live-updating in %2$s.</string>
+    <string name="root_folder">(root)</string>
+    <string name="root_folder_name">the root folder</string>
+    <string name="new_folder_title">New folder</string>
+    <string name="new_folder_in">Name of the new folder inside %s:</string>
+    <string name="new_folder_hint">folder name</string>
+    <string name="folder_name_empty">Enter a folder name.</string>
+    <string name="creating_folder">Creating folder %s…</string>
+    <string name="created_folder">Created folder /%s.</string>
+    <string name="could_not_create_folder">Could not create folder</string>
+
+    <!-- move -->
+    <string name="move_to">Move to…</string>
+    <string name="move_title">Move \'%s\' to:</string>
+    <string name="type_path">Type a path…</string>
+    <string name="type_path_title">Destination folder</string>
+    <string name="type_path_hint">e.g. docs/reports</string>
+    <string name="move_failed">Move failed</string>
+    <string name="select_file_to_move">Select one or more files or folders to move first.</string>
+    <string name="upload_into_folder">Into folder: %s</string>
+    <string name="drag_hint">Drop \'%s\' on a folder to move it there, or on Trash to delete it.</string>
+    <string name="drag_hint_n">Drop on a folder to move %d files there, or on Trash to delete them.</string>
+
+    <!-- download (into the chosen folder; nothing is tracked afterwards) -->
+    <string name="download_action">⬇ Download</string>
+    <string name="download_selected">Download selected</string>
+    <string name="select_to_download">Select one or more files or folders to download.</string>
+    <string name="checking_folder">Checking the download folder…</string>
+    <string name="folder_exists_title">Folder already exists</string>
+    <string name="folder_exists_line">Folder “%s” already exists</string>
+    <string name="folder_exists_msg">in \'%s\', so it was not downloaded.</string>
+    <string name="file_exists_title">File already exists</string>
+    <string name="file_exists_one">A file with this name already exists in \'%s\':</string>
+    <string name="file_exists_n">%1$d files with these names already exist in \'%2$s\':</string>
+    <string name="file_exists_ask_one">What should happen?</string>
+    <string name="file_exists_ask_n">What should happen to all of them?</string>
+    <string name="overwrite">Overwrite</string>
+    <string name="keep_both">Keep both</string>
+    <string name="skip">Skip</string>
+    <string name="download_cancelled">Download cancelled.</string>
+    <string name="nothing_downloaded">Nothing downloaded.</string>
+    <string name="download_queued_n">Downloading %d file(s) in the background…</string>
+    <string name="download_queued_n_already">Downloading %1$d file(s) in the background — %2$d already in the queue.</string>
+    <string name="download_failed">Download failed</string>
+
+    <!-- delete: to Trash, server only -->
+    <string name="trash_confirm_title">Move to Trash?</string>
+    <string name="trash_confirm_msg">Move %s to Trash? They\'re removed from the server for every device; you can restore them from Trash later. Files you\'ve downloaded are not touched.</string>
+    <string name="move_to_trash">Move to Trash</string>
+    <string name="n_files">%d file(s)</string>
+    <string name="folder_and_n_files">/%1$s and its %2$d file(s)</string>
+    <string name="select_first">Select one or more files first.</string>
+    <!-- Trash: its own button at the top; restore / delete forever / empty -->
+    <string name="trash">Trash</string>
+    <string name="trash_n">Trash (%d)</string>
+    <string name="back_to_files">Back to files</string>
+    <string name="in_trash_status">Trash — Restore puts items back; Delete forever removes them for good.</string>
+    <string name="use_delete">To put things in Trash, use Delete (or drop them on the Trash button).</string>
+    <string name="trash_reserved">“Trash” is reserved for deleted items (names ignore case).</string>
+    <string name="trash_blocked">“%s” at the top level has the same name as Trash (names ignore case), so nothing can be moved to Trash. Move it into another folder first, then delete again.</string>
+    <string name="restore">Restore</string>
+    <string name="empty_trash">Empty Trash</string>
+    <string name="restored_n">Restored %d item(s).</string>
+    <string name="restoring">Restoring…</string>
+    <string name="cancelled_restored_n">Cancelled — put %d item(s) back.</string>
+    <string name="cancelled_restored_partial">Cancelled — put %1$d of %2$d item(s) back.</string>
+    <string name="restore_failed">Could not restore everything</string>
+    <string name="trashed_n">Moved %d item(s) to Trash.</string>
+    <string name="q_trash">Trash %d item(s)</string>
+    <string name="q_restore">Restore %d item(s)</string>
+    <string name="q_forever">Delete %d forever</string>
+    <string name="delete_forever">Delete forever</string>
+    <string name="delete_forever_title">Delete forever?</string>
+    <string name="delete_forever_msg_n">Permanently delete %d item(s) from the server? This can\'t be undone.</string>
+    <string name="empty_trash_title">Empty Trash?</string>
+    <string name="empty_trash_msg">Permanently delete everything in Trash from the server? This can\'t be undone.</string>
+    <string name="trash_is_empty">Trash is empty.</string>
+    <string name="folder_action_restore">Restore folder</string>
+    <string name="folder_action_delete_forever">Delete folder forever</string>
+    <string name="deleting">Deleting %s…</string>
+    <string name="deleting_n">Deleting %d file(s)…</string>
+    <string name="delete_failed">Delete failed</string>
+    <string name="deleted_n">Deleted %d file(s).</string>
+
+    <!-- multi-select -->
+    <string name="selected_n">%d selected</string>
+    <string name="move_title_n">Move %d items to:</string>
+    <string name="moving_n">Moving %d file(s)…</string>
+    <string name="moved_n">Moved %d file(s).</string>
+    <string name="bulk_partial">%1$d of %2$d done.</string>
+
+    <!-- upload -->
+    <string name="no_file_picker">No file picker app found.</string>
+    <string name="upload_title">Upload to server?</string>
+    <string name="upload_msg">Upload %d file(s) to the server?</string>
+    <string name="uploading_n">Uploading %d file(s)…</string>
+    <string name="uploaded_n">Uploaded %d file(s).</string>
+    <string name="some_not_uploaded">Some files were not uploaded</string>
+    <string name="cant_upload_title">Can\'t upload here</string>
+    <string name="cant_upload_msg">Trash only holds deleted items. Open another folder to upload.</string>
+    <string name="already_exists_title">Already exists</string>
+    <string name="file_exists_line">File “%s” already exists</string>
+    <string name="not_uploaded_one">in %s, so it was not uploaded.</string>
+    <string name="not_uploaded_n">in %s, so they were not uploaded.</string>
+    <string name="nothing_uploaded">Nothing uploaded.</string>
+
+    <!-- open folder -->
+    <string name="save_folder_title">Save folder</string>
+    <string name="folder_is">Downloads are saved in \'%s\'. Open the Files app to browse it.</string>
+
+    <!-- download folder (SAF) -->
+    <string name="choose_folder_title">Choose a download folder</string>
+    <string name="choose_folder_msg">Pick a folder to save downloads into (for example, create one under Documents). You can browse it in the Files app, and it stays out of shared media.</string>
+    <string name="choose">Choose</string>
+    <string name="folder_set">Downloads will be saved in \'%s\'.</string>
+
+    <!-- background transfers / notification -->
+    <string name="tasks_idle">Tasks ▲</string>
+    <string name="tasks_active">Tasks (%d) ▲</string>
+    <string name="tasks_empty">No active tasks</string>
+    <string name="task_transfer">Transfer</string>
+    <string name="task_delete">Delete</string>
+    <string name="task_move">Move</string>
+    <string name="queue_idle">Queue ▲</string>
+    <string name="queue_active">Queue (%d) ▲</string>
+    <string name="queue_empty">Queue is empty</string>
+    <string name="queue_remove">✕</string>
+    <string name="cancelling">Cancelling…</string>
+    <string name="op_cancelled">Cancelled.</string>
+    <string name="cancel_task_title">Cancel task?</string>
+    <string name="cancel_task_msg">Stop the running %s? Work already done is kept; the rest is skipped.</string>
+    <string name="cancel_delete_restore_msg">Stop the running Delete? Anything already moved to Trash is put back, so the folder is left as it was.</string>
+    <string name="stop">Stop</string>
+    <string name="keep_going">Keep going</string>
+    <string name="q_download">Download %s</string>
+    <string name="q_download_n">Download %d files</string>
+    <string name="q_upload">Upload %d file(s)</string>
+    <string name="q_delete_folder">Delete /%s</string>
+    <string name="q_move">Move %d item(s)</string>
+    <string name="notif_channel">Transfers</string>
+    <string name="notif_starting">Starting…</string>
+    <string name="notif_downloading">Downloading %s</string>
+    <string name="notif_downloading_n">Downloading %1$s  (%2$d/%3$d)</string>
+    <string name="notif_uploading">Uploading %s</string>
+    <string name="notif_failed">Failed: %s</string>
+    <string name="already_queued">Already in the queue.</string>
+    <string name="upload_queued">Uploading %d file(s) in the background…</string>
+    <string name="folder_action_open">Open</string>
+    <string name="folder_action_download">Download folder</string>
+    <string name="folder_action_move">Move folder…</string>
+    <string name="folder_action_delete">Delete folder</string>
+    <string name="drag_hint_folder">Drop \'%s\' on a folder to move it inside, or on Trash to delete it.</string>
+    <string name="folder_move_into_self">Can\'t move a folder into itself.</string>
+    <string name="folder_move_noop">\'%s\' is already there.</string>
+    <string name="folder_empty_download">That folder has no files to download.</string>
+
+    <!-- settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_url_label">Server URL</string>
+    <string name="settings_url_hint">http://192.168.1.50:8000</string>
+    <string name="settings_key_label">API key</string>
+    <string name="settings_key_hint">the same key as the server</string>
+    <string name="save">Save</string>
+    <string name="settings_incomplete">Enter both a server URL and an API key.</string>
+    <string name="settings_saved">Saved.</string>
+    <string name="settings_locked">Settings can be changed once the running and queued jobs have finished (or been stopped).</string>
+</resources>

@@ -1,0 +1,46 @@
+# Server configuration. Copy to server-config.toml and edit.
+#
+# The server reads this file from ./server-config.toml, from the path given to
+#   python -m server --config /path/to/server-config.toml
+# or from the STORAGE_SERVER_CONFIG environment variable. Any single setting can
+# also be overridden by its environment variable (STORAGE_API_KEY, STORAGE_HOST,
+# ...), which then takes precedence over the value here.
+
+[server]
+# The shared secret clients must present in the X-API-Key header. Required, and
+# must be at least 16 characters. Generate a strong one once and keep it secret:
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"
+api_key = "PASTE_A_LONG_RANDOM_KEY_HERE"
+
+# Where files and the manifest DB live. Created automatically if missing.
+# Use an absolute path when running as a service (e.g. /var/lib/async-storage-bot).
+data_dir = "./data"
+
+# Bind address. 127.0.0.1 (the default) is loopback only — reachable just from
+# this machine. To reach it from other machines over Tailscale, set this to the
+# server's Tailscale IP (its 100.x.y.z address). Only use "0.0.0.0" if every
+# network interface on the machine is trusted.
+host = "127.0.0.1"
+
+# Bind port.
+port = 8000
+
+# Where per-day log files are written — one YYYY-MM-DD.txt per day holding all of
+# the server's log output. Leave unset to use <data_dir>/logs.
+# log_dir = "/var/log/async-storage-bot"
+
+[limits]
+# Largest single upload accepted, in bytes. Uploads are streamed to disk and
+# rejected the moment they exceed this. Default here is 10 GiB.
+max_file_bytes = 10737418240
+
+# How many uploads may be written to disk at once. Bounds concurrent disk/IO use.
+max_concurrent_uploads = 4
+
+# Total live storage allowed across all files, in bytes. 0 = unlimited. Set it
+# to your disk budget to stop uploads filling the disk (e.g. 107374182400 = 100 GiB).
+max_total_bytes = 0
+
+# Seconds to wait for the next chunk of an upload body before aborting a stalled
+# (or slow-loris) upload that is holding a slot.
+upload_timeout = 60

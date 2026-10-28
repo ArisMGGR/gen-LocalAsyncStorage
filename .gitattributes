@@ -1,0 +1,7 @@
+# Windows scripts keep CRLF line endings on every checkout.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+# Linux scripts and the systemd unit keep LF, so a checkout made on Windows
+# still runs when copied to the server.
+*.sh text eol=lf
+*.service text eol=lf

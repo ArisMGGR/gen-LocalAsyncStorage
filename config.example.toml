@@ -1,0 +1,18 @@
+# Client configuration. Copy to config.toml and edit.
+# The client reads this file from ./config.toml, or from the path in the
+# STORAGE_CLIENT_CONFIG environment variable.
+
+[server]
+# The storage server's address. On the same machine/LAN use its IP; across
+# networks use the Tailscale MagicDNS name of the Server Laptop, e.g.:
+#   url = "http://server-laptop:8000"
+url = "http://server-laptop:8000"
+
+# The shared secret. Must exactly match STORAGE_API_KEY on the server.
+api_key = "PASTE_THE_SAME_KEY_AS_THE_SERVER"
+
+[client]
+# Folder that downloads are saved into. The desktop app asks for it on first
+# launch (and it can be changed from Settings). Files land straight in it; a
+# downloaded folder lands in it as a sub-folder with its own structure.
+download_dir = ""

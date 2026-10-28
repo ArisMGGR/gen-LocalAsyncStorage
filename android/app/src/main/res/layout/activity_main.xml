@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Search box, and the Trash button: Trash lives here, not in the folder
+         list. Tap it to open Trash (and again to go back); drop dragged rows on
+         it to delete them. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/search"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/search_hint"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            android:maxLines="1"
+            android:drawableStart="@android:drawable/ic_menu_search"
+            android:drawablePadding="6dp"
+            android:importantForAutofill="no"
+            android:paddingBottom="4dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_trash"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:textColor="@color/accent"
+            android:text="@string/trash"
+            app:icon="@drawable/ic_trash"
+            app:iconTint="@color/accent"
+            app:strokeColor="@color/accent" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingBottom="6dp">
+
+        <Button
+            android:id="@+id/btn_up"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:text="@string/up" />
+
+        <TextView
+            android:id="@+id/location"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:ellipsize="middle"
+            android:singleLine="true"
+            android:textColor="#555555"
+            android:text="/" />
+
+        <Button
+            android:id="@+id/btn_new_folder"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:text="@string/new_folder" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/file_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#11000000" />
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:textColor="#777777"
+        android:text="@string/loading" />
+
+    <!-- Per-process progress bars, hidden until the Tasks strip is pressed. -->
+    <LinearLayout
+        android:id="@+id/tasks_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/tasks_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:textColor="#777777"
+            android:text="@string/tasks_empty" />
+
+        <LinearLayout android:id="@+id/row_transfer"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:visibility="gone" android:paddingTop="4dp">
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/lbl_transfer" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:textSize="12sp" android:textColor="#999999" />
+                <ProgressBar android:id="@+id/bar_transfer" style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="100" android:progress="0" android:progressTint="@color/accent" />
+            </LinearLayout>
+            <Button android:id="@+id/cancel_transfer"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:minWidth="0dp" android:textColor="@color/danger" android:text="@string/queue_remove" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/row_delete"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:visibility="gone" android:paddingTop="4dp">
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/lbl_delete" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:textSize="12sp" android:textColor="#999999" />
+                <ProgressBar android:id="@+id/bar_delete" style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="100" android:progress="0" android:progressTint="@color/tint_delete" />
+            </LinearLayout>
+            <Button android:id="@+id/cancel_delete"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:minWidth="0dp" android:textColor="@color/danger" android:text="@string/queue_remove" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/row_move"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:visibility="gone" android:paddingTop="4dp">
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/lbl_move" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:textSize="12sp" android:textColor="#999999" />
+                <ProgressBar android:id="@+id/bar_move" style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="100" android:progress="0" android:progressTint="@color/tint_move" />
+            </LinearLayout>
+            <Button android:id="@+id/cancel_move"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:minWidth="0dp" android:textColor="@color/danger" android:text="@string/queue_remove" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Queued (waiting) transfers, hidden until the Queue strip is pressed. -->
+    <LinearLayout
+        android:id="@+id/queue_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/queue_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:textColor="#777777"
+            android:text="@string/queue_empty" />
+
+        <LinearLayout
+            android:id="@+id/queue_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_tasks"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/tasks_idle" />
+
+        <Button
+            android:id="@+id/btn_queue"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/queue_idle" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/btn_refresh"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_refresh"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/refresh" />
+
+        <Button
+            android:id="@+id/btn_add"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="@string/add_files" />
+
+        <ImageButton
+            android:id="@+id/btn_delete"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="6dp"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_delete"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/delete" />
+
+        <Button
+            android:id="@+id/btn_open"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="@string/open_folder" />
+    </LinearLayout>
+
+</LinearLayout>
