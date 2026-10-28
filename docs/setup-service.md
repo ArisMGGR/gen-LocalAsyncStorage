@@ -1,8 +1,8 @@
 # Run the server as a service (systemd)
 
 On the Server Laptop you'll usually want the storage server running in the
-background — started at boot, restarted if it crashes — just like your other
-bots (e.g. `server_YtWatchlistbot`). On Linux that's a **systemd service**, and
+background — started at boot, restarted if it crashes — just like any other
+background service. On Linux that's a **systemd service**, and
 this repo ships a ready-to-edit unit: [`async-storage-bot.service`](../async-storage-bot.service).
 
 It runs as **your own login user**, and reads every setting (the API key, bind

@@ -1,7 +1,7 @@
 # systemd unit for the Async Storage DOS server ("async-storage-bot").
 #
-# Runs as your normal login user, like your other background bots
-# (server_YtWatchlistbot, ...). All settings — the API key, host, port, and
+# Runs as your normal login user, like any other background service.
+# All settings — the API key, host, port, and
 # limits — are read from server-config.toml in the WorkingDirectory below.
 #
 # Install (see docs/setup-service.md for the full walkthrough):

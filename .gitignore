@@ -6,11 +6,11 @@ venv/
 env/
 
 # Secrets / local config. Only the *.example.toml templates are tracked;
-# any other config file (custom --config / STORAGE_*_CONFIG names) stays local.
+# any other TOML (config.toml, server-config.toml, custom --config /
+# STORAGE_*_CONFIG names) stays local.
 .env
 .env.*
-config*.toml
-server-config*.toml
+*.toml
 !*.example.toml
 *.bak
 
@@ -28,9 +28,13 @@ build/
 dist/
 *.spec
 
-# Android signing keys (build output is covered by android/.gitignore)
+# Android signing keys and their passwords (build output is covered by android/.gitignore)
 *.jks
 *.keystore
+keystore.properties
+
+# IDE (Android Studio / JetBrains opened at the repo root)
+.idea/
 
 # OS junk
 .DS_Store
