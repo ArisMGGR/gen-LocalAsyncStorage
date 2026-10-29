@@ -2,7 +2,6 @@
 <resources>
     <color name="danger">#C0392B</color>
     <color name="accent">#EE2A3E</color>
-    <color name="tint_check">#673AB7</color>
     <color name="tint_delete">#F57C00</color>
     <color name="tint_move">#FDD835</color>
 </resources>

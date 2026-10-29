@@ -54,7 +54,6 @@ def cmd_status(config) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     command = argv[0] if argv else "status"
-    config = load_config()
 
     if command != "status":
         log.error(
@@ -63,6 +62,12 @@ def main(argv: list[str] | None = None) -> int:
             command,
         )
         return 2
+    try:
+        config = load_config()
+    except Exception as exc:
+        # A missing or broken config.toml gets one line, not a traceback.
+        log.error("%s", exc)
+        return 1
     return cmd_status(config)
 
 

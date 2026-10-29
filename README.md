@@ -61,7 +61,7 @@ api_key = "<the-key-you-generated>"   # required, min 16 chars
 data_dir = "./data"                    # files + manifest DB (created automatically)
 host = "127.0.0.1"                      # loopback by default; see Binding below
 port = 8000
-# log_dir = "./data/logs"              # optional; defaults to <data_dir>/logs
+# log_dir = "./logs"                   # optional; defaults to ./logs
 
 [limits]
 max_file_bytes = 10737418240           # 10 GiB — largest single upload accepted
@@ -85,9 +85,10 @@ and rejected the moment they exceed it, so the server never buffers an unbounded
 file in memory. `max_total_bytes` set to your disk size stops uploads filling
 the disk, and `upload_timeout` drops stalled/slow-loris connections.
 
-**Logs.** The server writes all of its output — startup, requests, shutdown — to
-a **per-day log file** in `log_dir` (default `<data_dir>/logs`), one
-`YYYY-MM-DD.txt` per day, and still logs to the console so `journalctl` keeps
+**Logs.** The server writes all of its output — startup, requests, shutdown, and
+every issue (refused or failed requests with their reason, unhandled errors with
+a traceback, config errors that stop it starting) — to a **per-day log file** in
+`log_dir` (default `./logs`), one `YYYY-MM-DD.log` per day, and still logs to the console so `journalctl` keeps
 working under the service. A new file is started automatically at midnight.
 
 Every setting can also be overridden by its environment variable
@@ -212,8 +213,8 @@ that's already taken — nothing is tracked afterwards:
 - a **folder** that already exists there is **not downloaded** (a popup says so);
 - for **files** that already exist there you're asked once, for all of them:
   **Overwrite**, **Keep both** (saved as `name (1).ext`), or **Skip**;
-- a name that gets taken while a download waits in the queue is never
-  overwritten — that file keeps both instead.
+- a name that gets taken while a download waits in the queue, or while it
+  downloads, is never overwritten — that file keeps both instead.
 
 Each download is checked against the server's sha256.
 
@@ -280,14 +281,15 @@ into another folder first. In Trash the buttons change to match:
 in one, deletes and moves in the other — so a delete never waits behind a big
 download, and the list stays usable while they run:
 
-- The **Tasks** strip shows a row per running job (Transfer, Install check,
-  Delete, Move) with its own progress, the file in flight, the transfer rate, and
-  a **Stop** button.
+- The **Tasks** strip shows a row per running job (Transfer, Delete, Move) with
+  its own progress, the file in flight, the transfer rate, and a **Stop** button.
 - The **Queue** strip lists jobs waiting their turn; **✕** drops one before it
   starts.
-- **Stop** finishes the item in hand and skips the rest. Stopping a *folder
-  delete* puts back whatever already reached Trash, so a half-finished delete
-  never leaves a folder split between Trash and where it was. Stopping a download
+- **Stop** finishes the item in hand and skips the rest. Stopping the delete of a
+  *single folder* (Delete folder, or Delete with just that folder selected) puts
+  back whatever already reached Trash, so it never leaves the folder split
+  between Trash and where it was; a delete of several items keeps what it had
+  already moved to Trash, and the Stop prompt says which applies. Stopping a download
   abandons the file in flight without leaving a partial copy behind.
 - Asking for a file that's **already queued or downloading does nothing** — the
   status line says so rather than fetching it a second time. Drop the queued job

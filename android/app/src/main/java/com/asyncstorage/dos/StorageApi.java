@@ -7,7 +7,6 @@ import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -123,18 +122,6 @@ public class StorageApi {
         }
     }
 
-    /** GET /health — returns the file count, or -1 if the key was rejected. */
-    public int health() throws Exception {
-        HttpURLConnection c = open("GET", baseUrl + "/health");
-        try {
-            if (c.getResponseCode() / 100 != 2) throw httpError(c);
-            JSONObject o = new JSONObject(readBody(c.getInputStream()));
-            return o.has("files") ? o.getInt("files") : -1;
-        } finally {
-            c.disconnect();
-        }
-    }
-
     /** Files (live and tombstoned) plus explicitly-created folders. */
     public static class ManifestData {
         public final List<FileEntry> files;
@@ -144,11 +131,6 @@ public class StorageApi {
             this.files = files;
             this.folders = folders;
         }
-    }
-
-    /** GET /manifest — every live-or-tombstoned file the server knows. */
-    public List<FileEntry> getManifest() throws Exception {
-        return fetchManifest().files;
     }
 
     /** GET /manifest — files and folders in one request. */
@@ -177,59 +159,8 @@ public class StorageApi {
     }
 
     /**
-     * GET /download — stream to dest atomically, verifying the sha256 header.
-     * Writes to a .part temp then renames; sets the file mtime from X-Mtime.
-     */
-    public void downloadToFile(String path, File dest, ProgressListener progress) throws Exception {
-        HttpURLConnection c = open("GET", baseUrl + "/download?path=" + enc(path));
-        c.setReadTimeout(0);
-        try {
-            if (c.getResponseCode() / 100 != 2) throw httpError(c);
-            String sha = c.getHeaderField("X-Content-SHA256");
-            double mtime = parseDouble(c.getHeaderField("X-Mtime"), 0);
-            long total = c.getContentLengthLong();
-
-            File parent = dest.getParentFile();
-            if (parent != null) parent.mkdirs();
-            File tmp = new File(dest.getAbsolutePath() + ".part");
-
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            long received = 0;
-            try (InputStream in = new BufferedInputStream(c.getInputStream());
-                 OutputStream out = new FileOutputStream(tmp)) {
-                byte[] buf = new byte[BUF];
-                int n;
-                while ((n = in.read(buf)) >= 0) {
-                    out.write(buf, 0, n);
-                    md.update(buf, 0, n);
-                    received += n;
-                    if (progress != null) progress.onProgress(received, total);
-                }
-            } catch (Exception e) {
-                tmp.delete();
-                throw e;
-            }
-
-            if (sha != null && !sha.isEmpty() && !Hashing.hex(md.digest()).equals(sha)) {
-                tmp.delete();
-                throw new IOException("content hash mismatch");
-            }
-            if (!tmp.renameTo(dest)) {
-                // renameTo can fail across some filesystems; fall back to copy.
-                copy(tmp, dest);
-                tmp.delete();
-            }
-            if (mtime > 0) {
-                dest.setLastModified((long) (mtime * 1000));
-            }
-        } finally {
-            c.disconnect();
-        }
-    }
-
-    /**
      * GET /download — stream into the given output stream, verifying the sha256
-     * header, and return the verified sha. Used when the destination is a SAF
+     * header, and return the verified sha. The destination is a SAF
      * DocumentFile (no java.io.File available). The caller owns/closes the stream
      * and is responsible for deleting the target on failure.
      */
@@ -318,22 +249,4 @@ public class StorageApi {
         postEmpty(baseUrl + "/folder/delete?path=" + enc(path));
     }
 
-    private static double parseDouble(String s, double dflt) {
-        try {
-            return s == null ? dflt : Double.parseDouble(s);
-        } catch (NumberFormatException e) {
-            return dflt;
-        }
-    }
-
-    private static void copy(File from, File to) throws IOException {
-        try (InputStream in = new FileInputStream(from);
-             OutputStream out = new FileOutputStream(to)) {
-            byte[] buf = new byte[BUF];
-            int n;
-            while ((n = in.read(buf)) >= 0) {
-                out.write(buf, 0, n);
-            }
-        }
-    }
 }

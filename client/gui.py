@@ -26,7 +26,8 @@ Long jobs run in the background, never freezing the window: downloads and
 uploads share one lane, deletes and moves another, and anything else waits in a
 queue. The **Tasks** strip shows what's running with a Stop button, and the
 **Queue** strip lists what's waiting so it can be dropped before it starts.
-Stopping a folder delete puts back whatever it already moved to Trash.
+Stopping the delete of a single folder puts back whatever it already moved to
+Trash; a delete of several items keeps what it had already moved.
 
     python -m client.gui
 
@@ -496,10 +497,14 @@ def plan_selection_move(
     entry removed. *Skipped* pairs an item with why it can't go (a folder into
     itself or a descendant, or anything onto the top-level name Trash, in any
     case). A folder already sitting in ``dest`` is silently left alone.
+    ``dest`` is spelt as the server spells it (see :func:`match_case`), so a
+    typed "docs" beside folder "Docs" moves into "Docs".
     """
     moves: list[tuple[str, str]] = []
     folder_moves: list[tuple[str, str]] = []
     skipped: list[tuple[str, str]] = []
+    if dest:
+        dest = match_case(dest, folder_spellings(file_paths, folder_paths), whole=True)
 
     for path in sel_files:
         dst = leaf_name(path) if not dest else f"{dest}/{leaf_name(path)}"
@@ -753,8 +758,9 @@ def resolve_clashes(plan: DownloadPlan, choice: str) -> None:
 
 def write_target(item: PlannedDownload) -> Path:
     """Where to write ``item`` now. The name was checked when the user clicked;
-    one taken since then (while the job waited in the queue) is never
-    overwritten — the file keeps both instead."""
+    one taken since then (while the job waited in the queue, or while its
+    bytes streamed) is never overwritten — the file keeps both instead.
+    Called as the finished download is put in place."""
     dest = item.dest
     if dest.is_dir() or (dest.exists() and not item.overwrite):
         return keep_both_name(dest)
@@ -2071,8 +2077,11 @@ class FileBrowser:
                     progress(base + sent, total_bytes or 1)
 
                 try:
+                    # The name is settled as the file is put in place, not
+                    # before it streams, so one taken meanwhile is kept.
                     self.api.download_to_file(
-                        item.path, write_target(item), cb, cancelled.is_set
+                        item.path, item.dest, cb, cancelled.is_set,
+                        place=lambda _dest, item=item: write_target(item),
                     )
                 except Cancelled:
                     stopped = True

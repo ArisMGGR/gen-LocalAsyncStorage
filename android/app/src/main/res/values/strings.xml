@@ -8,7 +8,6 @@
     <string name="server_unreachable">Server unreachable: %s</string>
     <string name="key_rejected">The server rejected the API key — check it in Settings.</string>
     <string name="settings_bad_url">That isn\'t a server address — e.g. http://192.168.1.50:8000</string>
-    <string name="n_files_live">%d file(s) on the server — live-updating.</string>
 
     <!-- buttons -->
     <string name="refresh">Refresh</string>
@@ -103,15 +102,12 @@
     <string name="trash_is_empty">Trash is empty.</string>
     <string name="folder_action_restore">Restore folder</string>
     <string name="folder_action_delete_forever">Delete folder forever</string>
-    <string name="deleting">Deleting %s…</string>
-    <string name="deleting_n">Deleting %d file(s)…</string>
     <string name="delete_failed">Delete failed</string>
     <string name="deleted_n">Deleted %d file(s).</string>
 
     <!-- multi-select -->
     <string name="selected_n">%d selected</string>
     <string name="move_title_n">Move %d items to:</string>
-    <string name="moving_n">Moving %d file(s)…</string>
     <string name="moved_n">Moved %d file(s).</string>
     <string name="bulk_partial">%1$d of %2$d done.</string>
 
@@ -119,9 +115,6 @@
     <string name="no_file_picker">No file picker app found.</string>
     <string name="upload_title">Upload to server?</string>
     <string name="upload_msg">Upload %d file(s) to the server?</string>
-    <string name="uploading_n">Uploading %d file(s)…</string>
-    <string name="uploaded_n">Uploaded %d file(s).</string>
-    <string name="some_not_uploaded">Some files were not uploaded</string>
     <string name="cant_upload_title">Can\'t upload here</string>
     <string name="cant_upload_msg">Trash only holds deleted items. Open another folder to upload.</string>
     <string name="already_exists_title">Already exists</string>

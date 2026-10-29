@@ -25,8 +25,9 @@ host = "127.0.0.1"
 # Bind port.
 port = 8000
 
-# Where per-day log files are written — one YYYY-MM-DD.txt per day holding all of
-# the server's log output. Leave unset to use <data_dir>/logs.
+# Where per-day log files are written — one YYYY-MM-DD.log per day holding all of
+# the server's log output, including every error and refused request. Leave
+# unset to use ./logs.
 # log_dir = "/var/log/async-storage-bot"
 
 [limits]

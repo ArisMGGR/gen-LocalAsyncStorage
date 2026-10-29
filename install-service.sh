@@ -222,9 +222,15 @@ add_candidate() {
 }
 
 # 1) whatever the currently installed service runs from,
+# Every value of a "Key=" line in the unit, with the quoting and escaping this
+# script writes (below) undone: Environment= lines are quoted, % is doubled.
+unit_setting() {
+  sed -n "s/^$1=//p" "$UNIT_DEST" \
+    | sed -e 's/^"\(.*\)"$/\1/' -e 's/%%/%/g' -e 's/\\"/"/g' -e 's/\\\\/\\/g'
+}
 if [ -f "$UNIT_DEST" ]; then
-  unit_wd="$(sed -n 's/^WorkingDirectory=//p' "$UNIT_DEST" | head -1)"
-  unit_cfg="$(sed -n 's/^Environment=STORAGE_SERVER_CONFIG=//p' "$UNIT_DEST" | head -1)"
+  unit_wd="$(unit_setting WorkingDirectory | head -1)"
+  unit_cfg="$(unit_setting Environment | sed -n 's/^STORAGE_SERVER_CONFIG=//p' | head -1)"
   if [ -n "$unit_wd" ]; then
     add_candidate "${unit_cfg:-$unit_wd/server-config.toml}" "$unit_wd"
   fi

@@ -69,6 +69,31 @@ class DownloadTest(unittest.TestCase):
         self.assertEqual([p.name for p in self.dir.iterdir()], ["a.txt.part"])
         self.assertEqual(mine.read_bytes(), b"mine")
 
+    @unittest.skipIf(gui is None, "tkinter is not available")
+    def test_a_name_taken_while_streaming_keeps_both(self):
+        # F-057: a.txt saved by the user mid-download used to be replaced.
+        body = b"server bytes"
+        dest = self.dir / "a.txt"
+
+        def stream():
+            yield body[:4]
+            dest.write_bytes(b"mine")  # taken after the name was checked
+            yield body[4:]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=stream(), headers={
+                "X-Content-SHA256": hashlib.sha256(body).hexdigest(),
+                "X-Mtime": "1700000000",
+            })
+
+        item = gui.PlannedDownload("a.txt", dest, False)
+        written = api_with(handler).download_to_file(
+            "a.txt", dest, place=lambda _d: gui.write_target(item)
+        )
+        self.assertEqual(written, self.dir / "a (1).txt")
+        self.assertEqual(dest.read_bytes(), b"mine")
+        self.assertEqual(written.read_bytes(), body)
+
 
 class ErrorTextTest(unittest.TestCase):
     def test_rejected_key_is_not_reported_as_unreachable(self):
@@ -85,6 +110,13 @@ class ErrorTextTest(unittest.TestCase):
         with self.assertRaises(httpx.ConnectError) as caught:
             api_with(refuse).fetch_manifest()
         self.assertIn("Could not reach", describe_error(caught.exception))
+
+    def test_delete_reports_the_servers_reason(self):
+        # F-062: Delete forever showed httpx's text and the URL instead.
+        api = api_with(lambda r: httpx.Response(500, json={"detail": "the server's disk is full"}))
+        with self.assertRaises(RuntimeError) as caught:
+            api.delete("a")
+        self.assertEqual(str(caught.exception), "the server's disk is full")
 
     def test_url_without_scheme_is_not_called_unreachable(self):
         # F-029: "server-laptop:8000" is a settings mistake, not a network one.
@@ -133,6 +165,18 @@ class StatusCommandTest(unittest.TestCase):
         self.assertIn("Could not reach the server", "\n".join(logs.output))
         fake.return_value.close.assert_called_once()
 
+    def test_missing_config_is_one_line_not_a_traceback(self):
+        # F-061: a missing config.toml escaped as a traceback, even for a
+        # command that doesn't exist.
+        missing = os.path.join(tempfile.gettempdir(), "no-such-dir", "config.toml")
+        with mock.patch.dict(os.environ, {"STORAGE_CLIENT_CONFIG": missing}):
+            with self.assertLogs("client") as logs:
+                self.assertEqual(cli.main(["status"]), 1)
+            self.assertIn("Config file not found", "\n".join(logs.output))
+            with self.assertLogs("client") as logs:
+                self.assertEqual(cli.main(["sync"]), 2)
+            self.assertIn("unknown command", "\n".join(logs.output))
+
 
 class PathTest(unittest.TestCase):
     def test_normalize_rejects_escapes(self):
@@ -163,6 +207,16 @@ class PlanTest(unittest.TestCase):
         )
         self.assertEqual((moves, folder_moves), ([], []))
         self.assertEqual([s[0] for s in skipped], ["a"])
+
+    def test_move_into_a_folder_typed_in_another_case(self):
+        # F-060: "docs" beside folder "Docs" made the server refuse every file.
+        files, folders = ["Docs/a.txt", "Docs/sub/b.txt", "c.txt", "e/f.txt"], ["Docs", "e"]
+        moves, folder_moves, skipped = gui.plan_selection_move(
+            ["c.txt"], ["e"], "docs/SUB", files, folders
+        )
+        self.assertEqual(moves, [("c.txt", "Docs/sub/c.txt"), ("e/f.txt", "Docs/sub/e/f.txt")])
+        self.assertEqual(folder_moves, [("e", "Docs/sub/e")])
+        self.assertEqual(skipped, [])
 
     def test_restore_into_a_taken_name_keeps_both(self):
         moves = gui.plan_restore(["Trash/a.txt"], ["a.txt", "Trash/a.txt"], [])

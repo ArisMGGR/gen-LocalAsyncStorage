@@ -1,7 +1,8 @@
 """Logging setup: mirror every log line to a per-day text file.
 
-A new file named ``YYYY-MM-DD.txt`` is created for each day inside the log
-directory, so each day's output is kept in its own file. Output still goes to
+A new file named ``YYYY-MM-DD.log`` is created for each day inside the log
+directory (``./logs`` by default), so each day's output — startup, requests and
+every issue the server hits — is kept in its own file. Output still goes to
 the console (stderr) as well, so ``journalctl`` keeps showing logs when the
 server runs as a systemd service.
 
@@ -27,7 +28,7 @@ _configured = False
 
 
 class DailyFileHandler(logging.Handler):
-    """Write each record to ``<directory>/<YYYY-MM-DD>.txt`` for the current day.
+    """Write each record to ``<directory>/<YYYY-MM-DD>.log`` for the current day.
 
     The target file tracks the date: when the day rolls over, the next record
     transparently switches to that day's file. Files are opened in append mode,
@@ -54,7 +55,7 @@ class DailyFileHandler(logging.Handler):
             except OSError:
                 pass
         self.directory.mkdir(parents=True, exist_ok=True)
-        self._stream = open(self.directory / f"{today}.txt", "a", encoding=self.encoding)
+        self._stream = open(self.directory / f"{today}.log", "a", encoding=self.encoding)
         self._current_day = today
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -102,6 +103,10 @@ def configure_logging(log_dir: Path, level: int = logging.INFO) -> Path:
         root.addHandler(daily)
     except OSError as exc:
         root.warning("Could not open log directory %s (%s); logging to console only.", log_dir, exc)
+
+    # Route warnings.warn() (e.g. deprecations from dependencies) into the log
+    # too, so they land in the day's file instead of only on stderr.
+    logging.captureWarnings(True)
 
     _configured = True
     return log_dir

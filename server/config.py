@@ -29,7 +29,7 @@ Settings and their environment-variable overrides:
     [server].port      / STORAGE_PORT
         Bind port. Default: 8000.
     [server].log_dir   / STORAGE_LOG_DIR
-        Directory for per-day log files (YYYY-MM-DD.txt). Default: <data_dir>/logs.
+        Directory for per-day log files (YYYY-MM-DD.log). Default: ./logs
     [limits].max_file_bytes           / STORAGE_MAX_FILE_BYTES
         Largest upload accepted, in bytes. Default: 10 GiB. Guards against
         unbounded uploads.
@@ -72,6 +72,9 @@ _DEFAULT_UPLOAD_TIMEOUT = 60.0
 # generator in the docs produces ~43 chars, so this only catches weak keys set
 # by hand. Guards against footguns, not a substitute for a random key.
 _MIN_API_KEY_LEN = 16
+
+# Where per-day log files go when log_dir isn't set.
+DEFAULT_LOG_DIR = "./logs"
 
 # Where the config file is looked for when no explicit path is given.
 _DEFAULT_CONFIG_FILENAME = "server-config.toml"
@@ -171,13 +174,13 @@ def load_config(path: str | Path | None = None) -> ServerConfig:
     )
     host = str(_resolve("STORAGE_HOST", server, "host", "127.0.0.1"))
 
-    # Per-day log files default to a "logs" folder inside the data directory, so
-    # all runtime state (files, manifest, logs) lives together unless overridden.
-    log_dir_val = _resolve("STORAGE_LOG_DIR", server, "log_dir", None)
-    if log_dir_val:
-        log_dir = Path(str(log_dir_val)).expanduser().resolve()
-    else:
-        log_dir = data_dir / "logs"
+    # Per-day log files go to a "logs" folder next to where the server is
+    # started (the checkout, under the systemd unit) unless overridden.
+    log_dir = (
+        Path(str(_resolve("STORAGE_LOG_DIR", server, "log_dir", DEFAULT_LOG_DIR)))
+        .expanduser()
+        .resolve()
+    )
 
     try:
         port = int(_resolve("STORAGE_PORT", server, "port", 8000))

@@ -29,7 +29,13 @@ import time
 from typing import Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse, Response
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from common.hashing import normalize_rel_path
 from server.auth import key_matches, require_api_key
@@ -99,6 +105,48 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+
+def _describe(request: Request) -> str:
+    """``METHOD /path?query from client`` for a log line about a request.
+
+    Only the request line and the caller's address are logged — never headers,
+    so the API key doesn't end up in the log files.
+    """
+    target = request.url.path
+    if request.url.query:
+        target += "?" + request.url.query
+    client = request.client.host if request.client else "unknown"
+    return f"{request.method} {target} from {client}"
+
+
+# Every refused or failed request is logged with its reason, so the day's log
+# file records each issue rather than only uvicorn's bare status line. Client
+# mistakes (4xx) are warnings; the server failing (5xx) is an error. The
+# responses themselves are FastAPI's defaults, unchanged.
+@app.exception_handler(StarletteHTTPException)
+async def _log_http_error(request: Request, exc: StarletteHTTPException) -> Response:
+    level = logging.ERROR if exc.status_code >= 500 else logging.WARNING
+    log.log(level, "%d on %s: %s", exc.status_code, _describe(request), exc.detail)
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def _log_validation_error(request: Request, exc: RequestValidationError) -> Response:
+    problems = "; ".join(
+        f"{'.'.join(str(p) for p in err.get('loc', ()))}: {err.get('msg', '')}"
+        for err in exc.errors()
+    )
+    log.warning("422 on %s: %s", _describe(request), problems)
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def _log_unhandled_error(request: Request, exc: Exception) -> Response:
+    # Starlette re-raises after this so uvicorn still logs it; logging the
+    # traceback here, tied to the request, means the file has the whole story.
+    log.error("500 on %s: unhandled %s", _describe(request), type(exc).__name__, exc_info=exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
 def _safe_path(path: str) -> str:

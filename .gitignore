@@ -16,7 +16,8 @@ env/
 
 # Runtime data (server data_dir, logs, manifest DB, partial transfers)
 data/
-logs/
+logs/*
+!logs/.gitkeep
 *.db
 *.db-journal
 *.db-wal

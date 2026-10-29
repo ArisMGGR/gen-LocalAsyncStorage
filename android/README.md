@@ -46,8 +46,9 @@ file list and download exactly the files you want.
   **into the folder you're viewing**, after a confirmation prompt. A name that's
   already used there is not uploaded (a popup lists them); nothing can be uploaded
   into Trash.
-- **Tasks / Queue** — progress per running job with **Stop** (stopping a folder
-  delete puts back what already reached Trash), and **✕** on waiting jobs. Asking
+- **Tasks / Queue** — progress per running job with **Stop** (stopping the delete
+  of a single folder puts back what already reached Trash; a delete of several
+  items keeps what it already moved), and **✕** on waiting jobs. Asking
   for something already queued does nothing.
 - sha256 verification on every transfer, and a **Settings** screen for the server
   URL + API key.

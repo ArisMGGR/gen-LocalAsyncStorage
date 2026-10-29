@@ -166,7 +166,8 @@ class StorageAPI:
         dest_path: Path,
         progress: ProgressCB | None = None,
         cancel: CancelCB | None = None,
-    ) -> None:
+        place: Callable[[Path], Path] | None = None,
+    ) -> Path:
         """Stream a remote file to ``dest_path`` atomically, verifying its hash.
 
         Writes to a uniquely named ``.part`` temp file beside it (never one that
@@ -175,6 +176,10 @@ class StorageAPI:
         ``cancel()`` is polled between chunks: when it returns True the download
         stops with :class:`Cancelled` and the partial file is removed, so a
         stopped transfer never leaves a half-written copy behind.
+
+        ``place(dest_path)``, if given, picks the final path at the moment the
+        file is put in place (in the same folder), so a name taken while the
+        bytes streamed can still be avoided. Returns the path written.
         """
         with self._client.stream(
             "GET",
@@ -205,6 +210,8 @@ class StorageAPI:
                             progress(received, total)
                 if sha and hasher.hexdigest() != sha:
                     raise ValueError("content hash mismatch")
+                if place is not None:
+                    dest_path = place(dest_path)
                 os.replace(tmp, dest_path)
             except BaseException:
                 if os.path.exists(tmp):
@@ -212,10 +219,11 @@ class StorageAPI:
                 raise
         if mtime:
             os.utime(dest_path, (mtime, mtime))
+        return dest_path
 
     def delete(self, path: str) -> None:
         r = self._client.post("/delete", params={"path": path})
-        r.raise_for_status()
+        self._check(r)
 
     def move(self, src: str, dst: str) -> FileEntry | None:
         """Move/rename a file on the server from ``src`` to ``dst``."""

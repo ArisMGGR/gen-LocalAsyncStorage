@@ -47,13 +47,21 @@ as_root() {
 CONFIG=""
 WORKDIR="$SCRIPT_DIR"
 DATA_OVERRIDE=""
+# Every value of a "Key=" line in the unit, with the quoting and escaping
+# install-service.sh writes undone (it quotes Environment= lines and doubles %).
+unit_setting() {
+  sed -n "s/^$1=//p" "$UNIT_DEST" \
+    | sed -e 's/^"\(.*\)"$/\1/' -e 's/%%/%/g' -e 's/\\"/"/g' -e 's/\\\\/\\/g'
+}
 if [ -f "$UNIT_DEST" ]; then
-  CONFIG="$(sed -n 's/^Environment=STORAGE_SERVER_CONFIG=//p' "$UNIT_DEST" | head -1 || true)"
-  wd="$(sed -n 's/^WorkingDirectory=//p' "$UNIT_DEST" | head -1 || true)"
+  CONFIG="$(unit_setting Environment | sed -n 's/^STORAGE_SERVER_CONFIG=//p' | head -1 || true)"
+  wd="$(unit_setting WorkingDirectory | head -1 || true)"
   [ -n "$wd" ] && WORKDIR="$wd"
-  DATA_OVERRIDE="$(sed -n 's/^Environment=STORAGE_DATA_DIR=//p' "$UNIT_DEST" | head -1 || true)"
+  DATA_OVERRIDE="$(unit_setting Environment | sed -n 's/^STORAGE_DATA_DIR=//p' | head -1 || true)"
 fi
-[ -z "$CONFIG" ] && CONFIG="$SCRIPT_DIR/server-config.toml"
+# The service reads ./server-config.toml from its working directory, which is
+# not necessarily this checkout.
+[ -z "$CONFIG" ] && CONFIG="$WORKDIR/server-config.toml"
 
 DATA_DIR=""
 if command -v python3 >/dev/null 2>&1; then

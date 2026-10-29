@@ -48,6 +48,7 @@ class ServerTest(unittest.TestCase):
             "STORAGE_SERVER_CONFIG": str(Path(self._tmp.name) / "absent.toml"),
             "STORAGE_API_KEY": KEY,
             "STORAGE_DATA_DIR": str(self.data_dir),
+            "STORAGE_LOG_DIR": str(self.data_dir / "logs"),
             "STORAGE_MAX_TOTAL_BYTES": str(self.max_total_bytes),
         }
         self._saved_env = {k: os.environ.get(k) for k in env}
@@ -283,6 +284,42 @@ class ServerTest(unittest.TestCase):
 
         self.assertEqual(self.run_client(scenario)["files"], 1)
 
+    # -- issues are logged --
+
+    def test_refused_requests_are_logged_with_their_reason(self):
+        async def scenario(c):
+            await c.get("/download", params={"path": "missing"})
+            await c.get("/manifest", headers={"X-API-Key": "wrong-key-wrong-key"})
+            await c.put("/upload", params={"path": "a"}, content=b"x")  # no headers
+
+        with self.assertLogs("server", level="WARNING") as logs:
+            self.run_client(scenario)
+        out = "\n".join(logs.output)
+        self.assertIn("404 on GET /download?path=missing", out)
+        self.assertIn("401 on GET /manifest", out)
+        self.assertIn("422 on PUT /upload?path=a", out)
+        self.assertNotIn("wrong-key", out)  # headers, and so keys, are never logged
+        self.assertNotIn(KEY, out)
+
+    def test_unhandled_errors_are_logged_with_a_traceback(self):
+        def boom():
+            raise RuntimeError("manifest exploded")
+
+        self.main.db.list_all = boom
+
+        async def go():
+            transport = httpx.ASGITransport(app=self.main.app, raise_app_exceptions=False)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test", headers={"X-API-Key": KEY}
+            ) as client:
+                return await client.get("/manifest")
+
+        with self.assertLogs("server", level="ERROR") as logs:
+            resp = asyncio.run(go())
+        self.assertEqual(resp.status_code, 500)
+        self.assertIn("500 on GET /manifest", logs.output[0])
+        self.assertIn("RuntimeError: manifest exploded", logs.output[0])
+
     # -- names differing only in case (F-028) --
 
     def test_case_variant_of_a_taken_name_is_refused(self):
@@ -484,7 +521,10 @@ class ConfigTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        names = ("STORAGE_HOST", "STORAGE_API_KEY", "STORAGE_PORT", "STORAGE_DATA_DIR")
+        names = (
+            "STORAGE_HOST", "STORAGE_API_KEY", "STORAGE_PORT", "STORAGE_DATA_DIR",
+            "STORAGE_LOG_DIR",
+        )
         self._saved_env = {k: os.environ.pop(k, None) for k in names}
         self.addCleanup(self._restore_env)
 
@@ -506,8 +546,29 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.host, "127.0.0.1")
         self.assertEqual(config.port, 8000)
 
+    def test_logs_default_to_a_logs_folder(self):
+        self.assertEqual(self.load("").log_dir, Path("logs").resolve())
+
     def test_values_are_kept(self):
         self.assertEqual(self.load('host = "100.1.2.3"\n').host, "100.1.2.3")
+
+
+class DailyFileHandlerTest(unittest.TestCase):
+    def test_writes_to_a_dated_log_file(self):
+        import logging
+        from datetime import date
+
+        from server.logging_setup import DailyFileHandler
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        handler = DailyFileHandler(Path(tmp.name) / "logs")
+        self.addCleanup(handler.close)
+        handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+        handler.emit(logging.makeLogRecord({"levelname": "ERROR", "msg": "disk full"}))
+
+        path = Path(tmp.name) / "logs" / f"{date.today().isoformat()}.log"
+        self.assertEqual(path.read_text(encoding="utf-8"), "ERROR disk full\n")
 
 
 class ManifestDBTest(unittest.TestCase):

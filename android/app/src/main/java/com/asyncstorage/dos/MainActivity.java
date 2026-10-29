@@ -908,7 +908,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         String raw = destFolder == null ? "" : destFolder.trim();
         while (raw.startsWith("/")) raw = raw.substring(1);
         while (raw.endsWith("/")) raw = raw.substring(0, raw.length() - 1);
-        final String dest = raw;
+        final String dest = serverSpelling(raw);
         if (refuseMoveIntoTrash(dest)) return;
 
         final List<String[]> moves = new ArrayList<>();  // {src, dst}
@@ -976,6 +976,17 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
             return true;
         }
         return false;
+    }
+
+    /**
+     * {@code dest} with each folder spelt as the server spells it ("docs" beside
+     * folder "Docs" becomes "Docs"), as the Trash and Restore plans do: the
+     * server refuses a second spelling of a folder. Mirrors the desktop's
+     * plan_selection_move.
+     */
+    private String serverSpelling(String dest) {
+        if (dest.isEmpty()) return dest;
+        return Plans.matchCase(dest, Plans.folderSpellings(filePaths(), folders), true);
     }
 
     /**
@@ -1090,6 +1101,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
      * the folder's own name as the top level (folder A dropped on B → B/A/…).
      */
     private void doMoveFolder(String srcFolder, String dest) {
+        dest = serverSpelling(dest);
         if (refuseMoveIntoTrash(dest)) return;
         String srcPrefix = srcFolder + "/";
         String srcParent = FolderNav.parent(srcFolder);
@@ -1434,7 +1446,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         String raw = destFolder == null ? "" : destFolder.trim();
         while (raw.startsWith("/")) raw = raw.substring(1);
         while (raw.endsWith("/")) raw = raw.substring(0, raw.length() - 1);
-        final String folder = raw;
+        final String folder = serverSpelling(raw);
         if (refuseMoveIntoTrash(folder)) return;
         final int total = entries.size();
 

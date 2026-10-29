@@ -105,12 +105,12 @@ curl -s http://HOST:PORT/health                # -> {"status":"ok"}
 Use the `host` and `port` from `server-config.toml`: a server bound to your
 Tailscale IP doesn't answer on `127.0.0.1`. (For `0.0.0.0`, use `127.0.0.1`.)
 
-The server also writes a **per-day log file** to `log_dir` (default
-`<data_dir>/logs`), one `YYYY-MM-DD.txt` per day, so you have a persistent record
-alongside `journalctl`:
+The server also writes a **per-day log file** to `log_dir` (default `./logs`
+in the checkout), one `YYYY-MM-DD.log` per day, so you have a persistent record
+of every issue alongside `journalctl`:
 
 ```bash
-tail -f "$(grep -oP 'data_dir\s*=\s*"\K[^"]+' server-config.toml)/logs/$(date +%F).txt"
+tail -f "logs/$(date +%F).log"
 ```
 
 ## Managing the service

@@ -10,10 +10,11 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from pathlib import Path
 
 import uvicorn
 
-from server.config import default_config_path, load_config
+from server.config import DEFAULT_LOG_DIR, default_config_path, load_config
 from server.logging_setup import configure_logging
 
 
@@ -34,12 +35,19 @@ def main() -> None:
     if args.config:
         os.environ["STORAGE_SERVER_CONFIG"] = args.config
 
-    config = load_config()
+    log = logging.getLogger("server")
+    try:
+        config = load_config()
+    except RuntimeError as exc:
+        # A bad config means no log_dir to read, so record why the server
+        # didn't start in the default logs folder, then exit.
+        configure_logging(Path(os.environ.get("STORAGE_LOG_DIR") or DEFAULT_LOG_DIR))
+        log.error("Server not started: %s", exc)
+        raise SystemExit(1)
 
     # Set up logging before anything else logs, so the console and the per-day
     # log file capture the whole run, including the startup lines below.
     configure_logging(config.log_dir)
-    log = logging.getLogger("server")
     log.info("Loading config from %s", default_config_path())
     log.info("Writing per-day logs to %s", config.log_dir)
 
