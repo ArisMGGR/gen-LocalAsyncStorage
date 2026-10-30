@@ -26,7 +26,7 @@ import hashlib
 import logging
 import math
 import time
-from typing import Iterator
+from typing import AsyncIterator, Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.exception_handlers import (
@@ -41,7 +41,7 @@ from common.hashing import normalize_rel_path
 from server.auth import key_matches, require_api_key
 from server.config import load_config
 from server.db import ManifestDB, fold
-from server.logging_setup import configure_logging
+from server.logging_setup import configure_logging, issues_logged
 from server.storage import BlobStore
 
 config = load_config()
@@ -96,6 +96,47 @@ _RESERVED_NAMES = frozenset(
 )
 _FORBIDDEN_CHARS = frozenset('<>:"|?*') | {chr(c) for c in range(1, 32)}
 
+# How often the server writes "All is fine" to the log while nothing has gone
+# wrong, so a quiet log file can be told apart from a server that has stopped.
+_HEARTBEAT_INTERVAL = 30 * 60  # 30 minutes
+
+
+def _check_health() -> str | None:
+    """Return what's wrong with the server's storage, or None if all is well."""
+    if not config.storage_dir.is_dir():
+        return f"storage folder {config.storage_dir} is missing"
+    try:
+        db.count_live()
+    except Exception as exc:  # noqa: BLE001 - any failure here is the finding
+        return f"manifest database can't be read ({type(exc).__name__}: {exc})"
+    return None
+
+
+async def _heartbeat() -> None:
+    """Every ``_HEARTBEAT_INTERVAL``, log "All is fine" if no warning or error
+    was logged since the last check and the storage still checks out."""
+    seen = issues_logged()
+    while True:
+        await asyncio.sleep(_HEARTBEAT_INTERVAL)
+        problem = await asyncio.to_thread(_check_health)
+        if problem is not None:
+            log.error("Health check failed: %s", problem)
+        elif issues_logged() == seen:
+            log.info("All is fine")
+        seen = issues_logged()
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    task = asyncio.create_task(_heartbeat())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
 # Disable the interactive API docs and OpenAPI schema: this is a private,
 # single-user service and there's no reason to advertise its surface.
 app = FastAPI(
@@ -104,6 +145,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=_lifespan,
 )
 
 

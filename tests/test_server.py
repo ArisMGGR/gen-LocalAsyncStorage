@@ -320,6 +320,51 @@ class ServerTest(unittest.TestCase):
         self.assertIn("500 on GET /manifest", logs.output[0])
         self.assertIn("RuntimeError: manifest exploded", logs.output[0])
 
+    # -- "All is fine" heartbeat --
+
+    def heartbeat_messages(self, during=None) -> list[str]:
+        """Run one heartbeat tick, calling ``during()`` mid-interval, and return
+        what the server logged. Collected with a plain handler rather than
+        assertLogs, which stops records reaching the root issue counter."""
+        import logging
+
+        self.main._HEARTBEAT_INTERVAL = 0.2
+        records: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = records.append
+        server_log = logging.getLogger("server")
+        server_log.addHandler(handler)
+        self.addCleanup(server_log.removeHandler, handler)
+
+        async def go():
+            task = asyncio.create_task(self.main._heartbeat())
+            await asyncio.sleep(0.05)
+            if during:
+                during()
+            await asyncio.sleep(0.25)
+            task.cancel()
+
+        asyncio.run(go())
+        return [r.getMessage() for r in records]
+
+    def test_heartbeat_says_all_is_fine_when_nothing_went_wrong(self):
+        self.assertEqual(self.heartbeat_messages(), ["All is fine"])
+
+    def test_heartbeat_stays_quiet_after_an_issue(self):
+        import logging
+
+        out = self.heartbeat_messages(lambda: logging.getLogger("x").warning("disk slow"))
+        self.assertNotIn("All is fine", out)
+
+    def test_heartbeat_reports_a_failed_health_check(self):
+        def boom():
+            raise RuntimeError("manifest exploded")
+
+        self.main.db.count_live = boom
+        out = self.heartbeat_messages()
+        self.assertNotIn("All is fine", out)
+        self.assertIn("manifest exploded", out[0])
+
     # -- names differing only in case (F-028) --
 
     def test_case_variant_of_a_taken_name_is_refused(self):

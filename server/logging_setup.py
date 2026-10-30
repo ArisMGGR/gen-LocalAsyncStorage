@@ -27,6 +27,30 @@ _DATEFMT = "%Y-%m-%d %H:%M:%S"
 _configured = False
 
 
+class IssueCounter(logging.Handler):
+    """Count every WARNING-or-worse record, from any logger.
+
+    The server's periodic "All is fine" heartbeat compares this count between
+    runs: if it moved, something went wrong in between and the heartbeat stays
+    quiet.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.count = 0
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.count += 1
+
+
+_issues = IssueCounter()
+
+
+def issues_logged() -> int:
+    """How many warnings and errors have been logged since the server started."""
+    return _issues.count
+
+
 class DailyFileHandler(logging.Handler):
     """Write each record to ``<directory>/<YYYY-MM-DD>.log`` for the current day.
 
@@ -96,6 +120,7 @@ def configure_logging(log_dir: Path, level: int = logging.INFO) -> Path:
     console = logging.StreamHandler()
     console.setFormatter(formatter)
     root.addHandler(console)
+    root.addHandler(_issues)
 
     try:
         daily = DailyFileHandler(log_dir)
