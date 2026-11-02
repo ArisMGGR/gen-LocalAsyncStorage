@@ -69,6 +69,12 @@ class StorageAPI:
         # must not be killed). The server has its own idle timeout to drop truly
         # stalled connections.
         self._transfer_timeout = httpx.Timeout(timeout, read=None, write=None)
+        # The server's per-file upload cap, learned from the manifest; None until
+        # fetched, or when an older server doesn't report it.
+        self.max_file_bytes: int | None = None
+        # The server disk's {"total", "used", "free"} bytes, also from the
+        # manifest; None until fetched or when the server doesn't report it.
+        self.disk: dict[str, int] | None = None
 
     @staticmethod
     def _check(r: httpx.Response) -> None:
@@ -106,6 +112,13 @@ class StorageAPI:
         data = r.json()
         files = [FileEntry.from_dict(d) for d in data.get("files", [])]
         folders = [str(p) for p in data.get("folders", [])]
+        limit = data.get("max_file_bytes")
+        self.max_file_bytes = int(limit) if limit is not None else None
+        disk = data.get("disk")
+        self.disk = (
+            {k: int(disk[k]) for k in ("total", "used", "free")}
+            if isinstance(disk, dict) else None
+        )
         return files, folders
 
     def upload_file(

@@ -539,6 +539,18 @@ public class TransferService extends Service {
         return name;
     }
 
+    /** Byte size of a content Uri, or -1 if the provider doesn't report it. */
+    public static long contentSize(Context ctx, Uri uri) {
+        try (Cursor c = ctx.getContentResolver().query(uri, null, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                int idx = c.getColumnIndex(OpenableColumns.SIZE);
+                if (idx >= 0 && !c.isNull(idx)) return c.getLong(idx);
+            }
+        } catch (Exception ignore) {
+        }
+        return -1;
+    }
+
     private static String baseName(String path) {
         if (path == null) return "";
         String p = path.replace('\\', '/');

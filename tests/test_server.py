@@ -273,6 +273,21 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(manifest.json()["files"], [])
         self.assertFalse((self.data_dir / "storage" / "x").exists())
 
+    def test_manifest_reports_the_upload_limit(self):
+        async def scenario(c):
+            return (await c.get("/manifest")).json()
+
+        self.assertEqual(self.run_client(scenario)["max_file_bytes"], self.main.config.max_file_bytes)
+
+    def test_manifest_reports_the_data_disk(self):
+        async def scenario(c):
+            return (await c.get("/manifest")).json()
+
+        disk = self.run_client(scenario)["disk"]
+        self.assertGreater(disk["total"], 0)
+        self.assertLessEqual(disk["used"], disk["total"])
+        self.assertLessEqual(disk["free"], disk["total"])
+
     # -- health count (F-014) --
 
     def test_health_counts_live_files_only(self):

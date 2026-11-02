@@ -25,6 +25,7 @@ import errno
 import hashlib
 import logging
 import math
+import shutil
 import time
 from typing import AsyncIterator, Iterator
 
@@ -239,10 +240,22 @@ def health(x_api_key: str = Header(default="")) -> dict:
 def get_manifest() -> dict:
     # "folders" carries explicitly-created (possibly empty) folders. Older
     # clients read only "files" and ignore it, so this stays backward compatible.
+    # "max_file_bytes" lets clients refuse an oversized upload before sending it.
     return {
         "files": [e.to_dict() for e in db.list_all()],
         "folders": db.list_folders(),
+        "max_file_bytes": config.max_file_bytes,
+        "disk": _disk_usage(),
     }
+
+
+def _disk_usage() -> dict | None:
+    """Total/used/free bytes of the disk holding the data folder, or None."""
+    try:
+        usage = shutil.disk_usage(config.data_dir)
+    except OSError:
+        return None
+    return {"total": usage.total, "used": usage.used, "free": usage.free}
 
 
 @app.get("/download", dependencies=[Depends(require_api_key)])

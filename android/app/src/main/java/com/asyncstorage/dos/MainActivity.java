@@ -65,6 +65,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     private FileAdapter adapter;
 
     private TextView status;
+    private TextView diskLabel;
+    private ProgressBar diskBar;
     private TextView location;
     private EditText search;
     private ImageButton deleteBtn;
@@ -88,6 +90,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     // files keyed by path, rebuilt with each manifest so render() looks rows up
     // in constant time instead of scanning every file per row.
     private Map<String, FileEntry> fileIndex = new HashMap<>();
+    // The server's per-file upload cap, from the manifest; -1 = unknown.
+    private long maxFileBytes = -1;
 
     // Per-process progress panel: one bar per task type, shown only when the
     // "Tasks" strip is expanded. Each type has an independent bar so concurrent
@@ -192,6 +196,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         SafStore.forgetLegacyRecords(this);
 
         status = findViewById(R.id.status);
+        diskLabel = findViewById(R.id.disk_label);
+        diskBar = findViewById(R.id.disk_bar);
         location = findViewById(R.id.location);
         search = findViewById(R.id.search);
         RecyclerView list = findViewById(R.id.file_list);
@@ -444,8 +450,26 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
                 if (!e.deleted) live.add(e);
             }
             List<String> fold = data.folders;
-            ui.post(() -> applyManifest(live, fold));
+            long limit = data.maxFileBytes;
+            long diskTotal = data.diskTotal, diskUsed = data.diskUsed, diskFree = data.diskFree;
+            ui.post(() -> {
+                maxFileBytes = limit;
+                renderDisk(diskTotal, diskUsed, diskFree);
+                applyManifest(live, fold);
+            });
         });
+    }
+
+    /** Fill the server-disk bar; a negative total means the server didn't say. */
+    private void renderDisk(long total, long used, long free) {
+        if (total <= 0 || used < 0 || free < 0) {
+            diskLabel.setText(R.string.disk_unknown);
+            diskBar.setProgress(0);
+            return;
+        }
+        diskLabel.setText(getString(R.string.disk_usage,
+                Fmt.size(used), Fmt.size(total), Fmt.size(free)));
+        diskBar.setProgress((int) Math.min(1000, used * 1000 / total));
     }
 
     private void applyManifest(List<FileEntry> newFiles, List<String> newFolders) {
@@ -1972,6 +1996,29 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
 
         List<String> names = new ArrayList<>();
         for (Uri u : uris) names.add(displayName(u));
+
+        // Refuse the whole batch up front if any file is over the server's cap,
+        // rather than copying and streaming it only to be rejected.
+        if (maxFileBytes >= 0) {
+            StringBuilder tooBig = new StringBuilder();
+            int over = 0;
+            for (int k = 0; k < uris.size(); k++) {
+                long size = TransferService.contentSize(this, uris.get(k));
+                if (size > maxFileBytes) {
+                    if (over++ < 12) {
+                        tooBig.append("• ").append(names.get(k))
+                                .append(" (").append(Fmt.size(size)).append(")\n");
+                    }
+                }
+            }
+            if (over > 0) {
+                if (over > 12) tooBig.append("…and ").append(over - 12).append(" more\n");
+                tooBig.append("\n").append(getString(R.string.too_large_msg, Fmt.size(maxFileBytes)));
+                alert(getString(R.string.too_large_title), tooBig.toString());
+                status.setText(R.string.upload_blocked_too_large);
+                return;
+            }
+        }
 
         // Uploads never replace anything: a name already used in this folder is
         // refused, and the rest go ahead.

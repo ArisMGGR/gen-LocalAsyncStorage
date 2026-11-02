@@ -118,6 +118,11 @@
     <string name="cant_upload_title">Can\'t upload here</string>
     <string name="cant_upload_msg">Trash only holds deleted items. Open another folder to upload.</string>
     <string name="already_exists_title">Already exists</string>
+    <string name="too_large_title">File too large</string>
+    <string name="too_large_msg">The server\'s limit is %s per file. Nothing was uploaded.</string>
+    <string name="upload_blocked_too_large">Upload blocked: file too large.</string>
+    <string name="disk_unknown">Server disk: —</string>
+    <string name="disk_usage">Server disk: %1$s used of %2$s (%3$s free)</string>
     <string name="file_exists_line">File “%s” already exists</string>
     <string name="not_uploaded_one">in %s, so it was not uploaded.</string>
     <string name="not_uploaded_n">in %s, so they were not uploaded.</string>

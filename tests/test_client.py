@@ -259,6 +259,23 @@ class UploadTest(unittest.TestCase):
         self.assertEqual([p for p, _ in failed], ["one.txt"])
         self.assertFalse(stopped)
 
+    def test_oversized_files_are_found_before_upload(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        d = Path(tmp.name)
+        (d / "small.txt").write_bytes(b"x" * 10)
+        (d / "big.txt").write_bytes(b"x" * 11)
+        pairs = [("small.txt", d / "small.txt"), ("big.txt", d / "big.txt")]
+        self.assertEqual(gui.oversized_uploads(pairs, 10), [("big.txt", 11)])
+        self.assertEqual(gui.oversized_uploads(pairs, None), [])  # older server
+
+    def test_disk_bar_text_and_fill(self):
+        disk = {"total": 1000, "used": 250, "free": 750}
+        self.assertEqual(gui.disk_percent(disk), 25.0)
+        self.assertEqual(gui.disk_text(disk), "250 B used of 1000 B (750 B free)")
+        self.assertEqual(gui.disk_percent(None), 0.0)  # older server
+        self.assertEqual(gui.disk_text(None), "—")
+
     def test_free_path_numbers_files_and_folders(self):
         self.assertEqual(gui.free_path("d/a.txt", {"d/a.txt", "d/a (1).txt"}), "d/a (2).txt")
         self.assertEqual(gui.free_path("d", {"d"}, is_folder=True), "d (1)")

@@ -126,10 +126,19 @@ public class StorageApi {
     public static class ManifestData {
         public final List<FileEntry> files;
         public final List<String> folders;
+        /** Server's per-file upload cap in bytes; -1 when an older server omits it. */
+        public final long maxFileBytes;
+        /** The server disk's total/used/free bytes; all -1 when the server omits them. */
+        public final long diskTotal, diskUsed, diskFree;
 
-        public ManifestData(List<FileEntry> files, List<String> folders) {
+        public ManifestData(List<FileEntry> files, List<String> folders, long maxFileBytes,
+                            long diskTotal, long diskUsed, long diskFree) {
             this.files = files;
             this.folders = folders;
+            this.maxFileBytes = maxFileBytes;
+            this.diskTotal = diskTotal;
+            this.diskUsed = diskUsed;
+            this.diskFree = diskFree;
         }
     }
 
@@ -152,7 +161,11 @@ public class StorageApi {
                     if (!f.isEmpty()) folders.add(f);
                 }
             }
-            return new ManifestData(files, folders);
+            JSONObject disk = o.optJSONObject("disk");  // older servers omit this
+            return new ManifestData(files, folders, o.optLong("max_file_bytes", -1),
+                    disk == null ? -1 : disk.optLong("total", -1),
+                    disk == null ? -1 : disk.optLong("used", -1),
+                    disk == null ? -1 : disk.optLong("free", -1));
         } finally {
             c.disconnect();
         }

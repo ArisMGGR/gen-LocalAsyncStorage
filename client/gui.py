@@ -141,6 +141,23 @@ def human_size(n: int) -> str:
     return f"{size:.1f} TB"
 
 
+def disk_percent(disk: dict[str, int] | None) -> float:
+    """How full the server disk is, 0–100 (0 when unknown)."""
+    if not disk or disk["total"] <= 0:
+        return 0.0
+    return min(100.0, 100.0 * disk["used"] / disk["total"])
+
+
+def disk_text(disk: dict[str, int] | None) -> str:
+    """'X used of Y (Z free)' for the server disk, or a dash when unknown."""
+    if not disk:
+        return "—"
+    return (
+        f"{human_size(disk['used'])} used of {human_size(disk['total'])}"
+        f" ({human_size(disk['free'])} free)"
+    )
+
+
 def human_speed(bytes_per_sec: float) -> str:
     """Render a transfer rate as B/s, KB/s, MB/s or GB/s."""
     rate = float(bytes_per_sec)
@@ -583,6 +600,23 @@ def split_upload_clashes(
     return ok, clashes
 
 
+def oversized_uploads(
+    pairs: list[tuple[str, Path]], max_bytes: int | None
+) -> list[tuple[str, int]]:
+    """Return (server_path, size) for every file larger than ``max_bytes``.
+
+    ``None`` means the limit is unknown (an older server), so nothing is refused.
+    """
+    if max_bytes is None:
+        return []
+    too_big: list[tuple[str, int]] = []
+    for server_path, local_path in pairs:
+        size = local_path.stat().st_size
+        if size > max_bytes:
+            too_big.append((server_path, size))
+    return too_big
+
+
 def upload_one(
     api: StorageAPI,
     server_path: str,
@@ -1019,6 +1053,18 @@ class FileBrowser:
         self.queue_list = ttk.Frame(self.queue_panel)
         self.queue_list.pack(fill="x")
 
+        # Server disk: how full the drive holding the server's data folder is.
+        diskbar = ttk.Frame(root)
+        ttk.Label(diskbar, text="Server disk:", foreground=FG).pack(side="left")
+        self.disk_bar = ttk.Progressbar(
+            diskbar, maximum=100, mode="determinate", length=240
+        )
+        self.disk_bar.pack(side="left", padx=(8, 0))
+        self.disk_var = tk.StringVar(value="—")
+        ttk.Label(diskbar, textvariable=self.disk_var, foreground=FG).pack(
+            side="left", padx=(8, 0)
+        )
+
         self.status = tk.StringVar(value="Loading…")
         self.status_label = ttk.Label(root, textvariable=self.status, foreground=FG)
 
@@ -1030,6 +1076,7 @@ class FileBrowser:
         self.tasks_holder.pack(side="bottom", fill="x", padx=12)
         strips.pack(side="bottom", fill="x", padx=12, pady=(0, 2))
         controls.pack(side="bottom", fill="x", padx=12, pady=(0, 8))
+        diskbar.pack(side="bottom", fill="x", padx=12, pady=(0, 8))
 
         self._refresh_tasks()
         self._refresh_queue()
@@ -1386,12 +1433,18 @@ class FileBrowser:
         self._folders = list(folders)
         self._normalize_cwd()
         self._render()
+        self._render_disk()
         if not self._busy and not self._quiet_status and not self._lanes_busy():
             n = len(self._files)
             here = f" in /{self._cwd}" if self._cwd else ""
             self.status.set(
                 f"{n} file{'s' if n != 1 else ''} on the server — live-updating{here}."
             )
+
+    def _render_disk(self) -> None:
+        disk = getattr(self.api, "disk", None)
+        self.disk_bar["value"] = disk_percent(disk)
+        self.disk_var.set(disk_text(disk))
 
     # -- folder navigation & rendering --
 
@@ -2996,6 +3049,26 @@ class FileBrowser:
             pairs = [
                 (normalize_rel_path(f"{self._cwd}/{sp}"), lp) for sp, lp in pairs
             ]
+
+        # Refuse the whole batch up front if any file is over the server's cap,
+        # rather than streaming it only to be rejected part-way through.
+        try:
+            too_big = oversized_uploads(pairs, self.api.max_file_bytes)
+        except OSError as exc:
+            messagebox.showerror("Cannot read selection", str(exc))
+            return
+        if too_big:
+            lines = [f"• {p} ({human_size(n)})" for p, n in too_big[:12]]
+            if len(too_big) > 12:
+                lines.append(f"…and {len(too_big) - 12} more")
+            messagebox.showerror(
+                "File too large",
+                "\n".join(lines)
+                + f"\n\nThe server's limit is {human_size(self.api.max_file_bytes)}"
+                " per file. Nothing was uploaded.",
+            )
+            self.status.set("Upload blocked: file too large.")
+            return
 
         names = [server_path for server_path, _ in pairs]
         preview = "\n".join(f"• {n}" for n in names[:15])
