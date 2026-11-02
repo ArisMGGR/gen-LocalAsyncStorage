@@ -1076,7 +1076,8 @@ class FileBrowser:
         self.tasks_holder.pack(side="bottom", fill="x", padx=12)
         strips.pack(side="bottom", fill="x", padx=12, pady=(0, 2))
         controls.pack(side="bottom", fill="x", padx=12, pady=(0, 8))
-        diskbar.pack(side="bottom", fill="x", padx=12, pady=(0, 8))
+        # Between the location bar and the file list.
+        diskbar.pack(fill="x", padx=12, pady=(8, 0), before=self.content)
 
         self._refresh_tasks()
         self._refresh_queue()
