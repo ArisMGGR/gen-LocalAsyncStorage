@@ -59,17 +59,13 @@ class BlobStore:
             # and never commit a partial/invalid upload.
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
+            # Nor leave the folders made for it: the disk would hold a name the
+            # manifest doesn't, and a later file of that name would be refused.
+            with contextlib.suppress(OSError):
+                self._prune_empty_parents(target.parent)
             raise
         # Preserve the client's modification time so mtimes stay comparable.
         os.utime(target, (mtime, mtime))
-
-    def write(self, rel_path: str, data: bytes, mtime: float) -> None:
-        """Write an in-memory bytes object atomically (used for small blobs)."""
-        with self.staged_write(rel_path, mtime) as fh:
-            fh.write(data)
-
-    def read(self, rel_path: str) -> bytes:
-        return self._abs(rel_path).read_bytes()
 
     def path_for(self, rel_path: str) -> Path:
         """Absolute on-disk path for a manifest entry, for streamed reads."""

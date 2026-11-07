@@ -7,6 +7,7 @@ environment variable, or defaults to ``./config.toml``. See
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import tomllib
@@ -85,6 +86,9 @@ def save_config(
     )
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(content, encoding="utf-8")
+    # It holds the API key. No-op on Windows, where the user's folder is private.
+    with contextlib.suppress(OSError):
+        os.chmod(cfg_path, 0o600)
     return cfg_path
 
 
@@ -128,6 +132,8 @@ def load_config(path: str | Path | None = None) -> ClientConfig:
     api_key = str(server.get("api_key", "")).strip()
     if not raw_url or not api_key:
         raise RuntimeError("config must set [server].url and [server].api_key")
+    if not api_key.isascii():
+        raise RuntimeError("[server].api_key has characters an HTTP header can't carry")
     server_url = normalize_server_url(raw_url)
     if server_url is None:
         raise RuntimeError(

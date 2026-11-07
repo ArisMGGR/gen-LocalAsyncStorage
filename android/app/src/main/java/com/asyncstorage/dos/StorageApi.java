@@ -21,8 +21,9 @@ import java.util.List;
  * Talks to the Async Storage DOS server over HTTP using only the platform
  * HttpURLConnection + org.json (no third-party libraries).
  *
- * Transfers use a read timeout of 0 (infinite) so a slow multi-GB upload or
- * download isn't killed mid-flight; the server keeps its own idle timeout.
+ * Read timeouts limit each read, not the whole transfer, so a slow multi-GB
+ * upload or download isn't killed mid-flight, while a stalled one fails instead
+ * of hanging past Stop.
  */
 public class StorageApi {
     /** Progress across a single transfer. total may be <= 0 when unknown. */
@@ -50,6 +51,11 @@ public class StorageApi {
     }
 
     private static final int CONNECT_TIMEOUT_MS = 15000;
+    // As on the desktop: a socket that stalls must not hold a thread forever.
+    private static final int READ_TIMEOUT_MS = 60000;
+    // How long an upload waits for the answer once its body is sent: the server
+    // still has to flush a file of up to many GB to disk.
+    private static final int UPLOAD_ANSWER_TIMEOUT_MS = 300000;
     private static final int BUF = 1 << 16;
 
     private final String baseUrl;
@@ -64,6 +70,7 @@ public class StorageApi {
         HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
         c.setRequestMethod(method);
         c.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        c.setReadTimeout(READ_TIMEOUT_MS);
         c.setRequestProperty("X-API-Key", apiKey);
         return c;
     }
@@ -180,7 +187,6 @@ public class StorageApi {
     public String downloadToStream(String path, OutputStream out, ProgressListener progress,
                                    CancelSignal cancel) throws Exception {
         HttpURLConnection c = open("GET", baseUrl + "/download?path=" + enc(path));
-        c.setReadTimeout(0);
         try {
             if (c.getResponseCode() / 100 != 2) throw httpError(c);
             String sha = c.getHeaderField("X-Content-SHA256");
@@ -217,7 +223,7 @@ public class StorageApi {
                            ProgressListener progress, CancelSignal cancel) throws Exception {
         long size = local.length();
         HttpURLConnection c = open("PUT", baseUrl + "/upload?path=" + enc(path));
-        c.setReadTimeout(0);
+        c.setReadTimeout(UPLOAD_ANSWER_TIMEOUT_MS);
         c.setDoOutput(true);
         c.setFixedLengthStreamingMode(size);
         c.setRequestProperty("X-Content-SHA256", sha);

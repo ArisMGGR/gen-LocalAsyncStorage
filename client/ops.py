@@ -10,7 +10,8 @@ A :class:`Lane` runs one job at a time and keeps the rest in a visible queue.
 Every job is handed a :class:`threading.Event` it polls between items, so:
 
 * the running job can be **stopped part-way** — it finishes the item in hand and
-  skips the rest (a delete then puts back what it already removed), and
+  skips the rest (the delete of a single folder then puts back what it already
+  removed), and
 * a job that hasn't started yet can be **dropped from the queue** outright.
 
 There is no Tk in here: the GUI passes an ``on_change`` callback and marshals it
@@ -77,6 +78,8 @@ class Lane:
         """Queue a job; it starts as soon as the lane is free."""
         op = Op(id=next(_next_id), label=label, body=body, meta=meta or {})
         with self._lock:
+            if self._closed:  # nothing would ever run it
+                return op
             self._waiting.append(op)
             self._lock.notify()
         self._changed()

@@ -25,6 +25,7 @@ import errno
 import hashlib
 import logging
 import math
+import os
 import shutil
 import time
 from typing import AsyncIterator, Iterator
@@ -37,6 +38,7 @@ from fastapi.exception_handlers import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import ClientDisconnect
 
 from common.hashing import normalize_rel_path
 from server.auth import key_matches, require_api_key
@@ -289,6 +291,11 @@ async def upload(
     _uploads_in_flight.add(fold(rel))
     try:
         return await _receive_upload(request, rel, max_bytes, x_content_sha256, x_mtime)
+    except ClientDisconnect:
+        # A client stopping its upload isn't a server fault. The temp file is
+        # gone already and nobody is left to read this response.
+        log.info("Upload of '%s' stopped by the client", rel)
+        return Response(status_code=499)
     finally:
         _uploads_in_flight.discard(fold(rel))
 
@@ -444,6 +451,11 @@ async def _receive_upload(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"sha256 mismatch: sent {x_content_sha256}, computed {actual}",
                     )
+                # Off the event loop: flushing a big file can take a while, and
+                # everyone else's requests must keep moving. The name is held
+                # in _uploads_in_flight meanwhile.
+                fh.flush()
+                await asyncio.to_thread(os.fsync, fh.fileno())
 
         entry = db.upsert(rel, sha256=actual, size=size, mtime=x_mtime)
     finally:

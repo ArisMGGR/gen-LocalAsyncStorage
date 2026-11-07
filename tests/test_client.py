@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import socket
 import tempfile
 import threading
 import time
@@ -20,7 +21,7 @@ import httpx
 
 import client.__main__ as cli
 from client.api import StorageAPI, describe_error
-from client.config import ClientConfig, normalize_server_url
+from client.config import ClientConfig, normalize_server_url, save_config
 from common.hashing import FileEntry, normalize_rel_path
 from server.db import ManifestDB  # stdlib only: a real manifest for the fake server
 
@@ -95,6 +96,53 @@ class DownloadTest(unittest.TestCase):
         self.assertEqual(written.read_bytes(), body)
 
 
+    def test_a_name_at_the_disks_limit_downloads(self):
+        # F-072: the temp name embedded the file name and overran the limit.
+        name = "n" * 245 + ".txt"
+        self.serve(b"data").download_to_file(name, self.dir / name)
+        self.assertEqual((self.dir / name).read_bytes(), b"data")
+
+    def test_refused_download_gives_the_servers_reason(self):
+        # F-083: the popup showed httpx's text, the URL and a link.
+        api = api_with(lambda r: httpx.Response(404, json={"detail": "Not found"}))
+        with self.assertRaises(RuntimeError) as caught:
+            api.download_to_file("gone.txt", self.dir / "gone.txt")
+        self.assertEqual(str(caught.exception), "Not found")
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+
+    def test_a_silent_server_ends_the_download(self):
+        # F-098: with no read timeout it hung for good, and Stop couldn't end it.
+        srv = socket.socket()
+        self.addCleanup(srv.close)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+
+        def serve() -> None:
+            conn, _addr = srv.accept()
+            self.addCleanup(conn.close)
+            conn.recv(4096)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\npartial")
+
+        threading.Thread(target=serve, daemon=True).start()
+        api = StorageAPI(f"http://127.0.0.1:{srv.getsockname()[1]}", "key", timeout=0.3)
+        self.addCleanup(api.close)
+        caught: list[BaseException] = []
+
+        def run() -> None:
+            try:
+                api.download_to_file("a.txt", self.dir / "a.txt")
+            except Exception as exc:
+                caught.append(exc)
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(10)
+        self.assertFalse(worker.is_alive())
+        self.assertIsInstance(caught[0], httpx.ReadTimeout)
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+
 class ErrorTextTest(unittest.TestCase):
     def test_rejected_key_is_not_reported_as_unreachable(self):
         # F-005: the app's status line uses describe_error.
@@ -137,6 +185,17 @@ class ServerUrlTest(unittest.TestCase):
         self.assertEqual(normalize_server_url("https://host"), "https://host")
         for bad in ("", "   ", "ftp://host", "http://", "host:notaport"):
             self.assertIsNone(normalize_server_url(bad), bad)
+
+
+class SaveConfigTest(unittest.TestCase):
+    def test_the_file_holding_the_key_is_private(self):
+        # F-076: the installer's 0600 had no match in the client's writer.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "config.toml"
+        with mock.patch("client.config.os.chmod") as chmod:
+            save_config("http://h:8000", "k" * 20, "", path)
+        chmod.assert_called_once_with(path, 0o600)
 
 
 class StatusCommandTest(unittest.TestCase):
@@ -222,6 +281,20 @@ class PlanTest(unittest.TestCase):
         moves = gui.plan_restore(["Trash/a.txt"], ["a.txt", "Trash/a.txt"], [])
         self.assertEqual(moves, [("Trash/a.txt", "a (1).txt")])
 
+    def test_restore_goes_around_a_file_on_the_way(self):
+        # F-087: the server refuses anything beneath file "a".
+        moves = gui.plan_restore(["Trash/a/b.txt"], ["Trash/a/b.txt", "a"], [])
+        self.assertEqual(moves, [("Trash/a/b.txt", "a (1)/b.txt")])
+
+    def test_a_restored_folder_goes_around_a_file_too(self):
+        # A folder whose name is now a file lands where its files do.
+        files = ["Trash/a/b.txt", "a"]
+        moves = gui.plan_restore(["Trash/a/b.txt"], files, [])
+        back = gui.plan_restore_folders(
+            ["Trash/a/empty", "Trash/a"], None, [*files, *(d for _s, d in moves)], []
+        )
+        self.assertEqual(back, [("Trash/a/empty", "a (1)/empty"), ("Trash/a", "a (1)")])
+
     def test_restore_uses_the_recorded_origin(self):
         # F-040: a second a.txt sits in Trash as "a (1).txt" but came from a.txt;
         # a folder trashed as "b (1)" came from b, empty sub-folders included.
@@ -259,6 +332,34 @@ class UploadTest(unittest.TestCase):
         self.assertEqual([p for p, _ in failed], ["one.txt"])
         self.assertFalse(stopped)
 
+    def test_a_date_the_server_refuses_falls_back_to_now(self):
+        # F-085: such a file couldn't be uploaded at all.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "a.txt"
+        path.write_bytes(b"x")
+        for bad in (4102444800, -86400):
+            try:
+                os.utime(path, (bad, bad))
+            except OSError:  # no such time on this disk
+                continue
+            api = mock.Mock()
+            gui.upload_one(api, "a.txt", path)
+            self.assertAlmostEqual(api.upload_file.call_args.args[2], time.time(), delta=60)
+        os.utime(path, (1700000000, 1700000000))
+        api = mock.Mock()
+        gui.upload_one(api, "a.txt", path)
+        self.assertEqual(api.upload_file.call_args.args[2], 1700000000)
+
+    def test_typed_folders_are_put_in_the_servers_form(self):
+        # F-094: "./trash" slipped past the reserved-name check.
+        self.assertEqual(gui.typed_folder(" ./docs//sub/ "), "docs/sub")
+        self.assertEqual(gui.typed_folder("./trash"), "trash")
+        for root in ("", "/", "."):
+            self.assertEqual(gui.typed_folder(root), "")
+        with self.assertRaises(ValueError):
+            gui.typed_folder("a/../b")
+
     def test_oversized_files_are_found_before_upload(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -275,6 +376,15 @@ class UploadTest(unittest.TestCase):
         self.assertEqual(gui.disk_text(disk), "250 B used of 1000 B (750 B free)")
         self.assertEqual(gui.disk_percent(None), 0.0)  # older server
         self.assertEqual(gui.disk_text(None), "—")
+
+    def test_trash_goes_around_a_file_on_the_way(self):
+        # F-070: the server refuses anything beneath file Trash/report.
+        files = ["Trash/report", "report/b.txt", "report/c/d.txt"]
+        moves, _ = gui.plan_trash(["report/b.txt"], [], files, [])
+        self.assertEqual(moves, [("report/b.txt", "Trash/report (1)/b.txt")])
+        moves, targets = gui.plan_trash([], ["report/c"], files, [])
+        self.assertEqual(targets, [("report/c", "Trash/report (1)/c")])
+        self.assertEqual(moves, [("report/c/d.txt", "Trash/report (1)/c/d.txt")])
 
     def test_free_path_numbers_files_and_folders(self):
         self.assertEqual(gui.free_path("d/a.txt", {"d/a.txt", "d/a (1).txt"}), "d/a (2).txt")
@@ -368,6 +478,16 @@ class ConfigErrorTest(unittest.TestCase):
         draft = browser.call_args.kwargs["config_draft"]
         self.assertEqual((draft.server_url, draft.api_key, draft.download_dir),
                          ("ftp://h", "the-key", "D:/dl"))
+
+    def test_a_key_no_header_can_carry_opens_the_settings(self):
+        # F-067: it used to kill the app at every launch.
+        browser = self.start_app(
+            '[server]\nurl = "http://h:8000"\napi_key = "κλειδίκλειδίκλειδί"\n'
+        )
+        _root, config = browser.call_args.args
+        self.assertIsNone(config)
+        self.assertIn("api_key", browser.call_args.kwargs["config_error"])
+        self.assertIsNotNone(browser.call_args.kwargs["config_draft"])
 
     def test_no_file_is_a_plain_first_run(self):
         browser = self.start_app(None)
@@ -545,6 +665,23 @@ class WindowTest(unittest.TestCase):
         self.assertIn("a/empty", self.server.db.list_folders())
         self.assertEqual(self.server.live(), ["c/a/x.txt"])
 
+    def test_summaries_count_folders_and_skipped_items(self):
+        # F-071: an empty folder's move read "Moved 0 items".
+        self.server.db.create_folder("e")
+        self.server.db.create_folder("c")
+        app = self.open_window()
+        self.run_ops_inline()
+        app._move_selection([], ["e"], "c")
+        self.flush()
+        self.assertEqual(app.status.get(), "Moved 1 item.")
+        self.server.add_file("c/a.txt")
+        app._poll_now()
+        self.flush()
+        app._move_selection(["c/a.txt"], ["c"], "c/e")  # c can't go into itself
+        self.flush()
+        self.assertEqual(app.status.get(), "Moved 1 of 2.")
+        self.assertEqual(self.server.live(), ["c/e/a.txt"])
+
     def test_trash_keeps_a_folder_whose_copy_failed(self):
         # F-046: _carry_folders keeps an original whose Trash copy failed.
         for f in ("a", "a/empty"):
@@ -634,6 +771,81 @@ class WindowTest(unittest.TestCase):
         self.flush()
         self.assertIs(app.api, self.server)
         self.assertIsNone(app._config_error)
+
+    def test_closing_asks_then_waits_for_running_jobs(self):
+        # F-084: closing exited at once, leaving a .part or a split folder.
+        app = self.open_window()
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        started = threading.Event()
+
+        def job(cancelled) -> None:
+            started.set()
+            cancelled.wait(10)
+            gate.wait(10)  # a rollback still running after the stop
+
+        app._enqueue_transfer("Download 2 files", job)
+        self.assertTrue(started.wait(5))
+        finish = mock.Mock()
+        app._finish_close = finish
+        running = app._transfers.running()
+        with mock.patch.object(gui.messagebox, "askyesno", return_value=False):
+            app.request_close()
+        self.assertFalse(running.cancelled.is_set())
+        with mock.patch.object(gui.messagebox, "askyesno", return_value=True):
+            app.request_close()
+        self.assertTrue(running.cancelled.is_set())
+        self.flush()
+        finish.assert_not_called()  # still winding up
+        gate.set()
+        deadline = time.monotonic() + 10
+        while not finish.called and time.monotonic() < deadline:
+            self.root.update()
+            time.sleep(0.02)
+        finish.assert_called_once()
+
+    def test_a_new_server_doesnt_show_the_old_servers_files(self):
+        # F-086: the old list stayed under the new label if the server was down.
+        self.server.add_file("old.txt")
+        app = self.open_window()
+        self.server.fail = RuntimeError("down")
+        app._settings_dialog = mock.Mock(
+            return_value=("http://other:8000", "k" * 20, self._tmp.name)
+        )
+        app._open_settings()
+        self.flush()
+        self.assertEqual(self.app._files, {})
+        self.assertEqual(app.tree.get_children(), ())
+
+    def test_an_empty_trash_stays_open(self):
+        # F-095: with no entry yet, the next poll threw the user out to the root.
+        self.server.db.create_folder("docs")
+        app = self.open_window()
+        app._navigate("docs")
+        app._toggle_trash()
+        app._poll_now(silent=True)
+        self.flush()
+        self.assertEqual(app._cwd, gui.TRASH)
+        app._toggle_trash()
+        self.assertEqual(app._cwd, "docs")
+
+    def test_a_poll_keeps_the_focused_row(self):
+        # F-088: Shift-click extends from it, and every rebuild lost it.
+        self.server.add_file("a.txt")
+        self.server.add_file("b.txt")
+        app = self.open_window()
+        app.tree.focus("file:b.txt")
+        app._poll_now(silent=True)
+        self.flush()
+        self.assertEqual(app.tree.focus(), "file:b.txt")
+
+    def test_a_job_asked_for_while_closing_doesnt_hold_the_window(self):
+        # It would never start, so the close waited for a second click.
+        app = self.open_window()
+        app._finish_close = mock.Mock()
+        app.request_close()
+        app._enqueue_transfer("Download 2 files", lambda cancelled: None)
+        self.assertFalse(app._lanes_busy())
 
     def test_settings_are_locked_while_a_job_runs(self):
         # F-031: changing the server mid-job would switch the job to it.

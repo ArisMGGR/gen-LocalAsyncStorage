@@ -340,6 +340,21 @@ def free_path(path: str, taken, is_folder: bool = False) -> str:
         n += 1
 
 
+def clear_ancestors(path: str, files: set[str], taken: set[str]) -> str:
+    """``path`` with any folder on the way that is really a file numbered like
+    a folder ("Trash/report/b.txt" beside file "Trash/report" becomes
+    "Trash/report (1)/b.txt"): the server refuses anything beneath a file.
+
+    ``files`` and ``taken`` hold case-folded names (see :func:`server_names`).
+    """
+    parts = path.split("/")
+    for i in range(1, len(parts)):
+        node = "/".join(parts[:i])
+        if node.casefold() in files:
+            parts[: i] = free_path(node, taken, is_folder=True).split("/")
+    return "/".join(parts)
+
+
 def server_names(file_paths, folder_paths) -> set[str]:
     """Every path in use on the server, live files and every folder, case-folded.
 
@@ -361,13 +376,15 @@ def plan_trash(
     keep the spelling Trash already has for them (see :func:`match_case`).
     """
     taken = server_names(file_paths, folder_paths)
+    files_there = {p.casefold() for p in file_paths}
     spelling = folder_spellings(file_paths, folder_paths)
     # Trash itself is never respelt onto a user's "trash" (trash_blocker).
     spelling[TRASH.casefold()] = TRASH
     moves: list[tuple[str, str]] = []
     targets: list[tuple[str, str]] = []
     for folder in folders:
-        dst = free_path(match_case(trash_path(folder), spelling), taken, is_folder=True)
+        dst = clear_ancestors(match_case(trash_path(folder), spelling), files_there, taken)
+        dst = free_path(dst, taken, is_folder=True)
         taken.add(dst.casefold())
         learn_spelling(spelling, dst, whole=True)
         targets.append((folder, dst))
@@ -379,7 +396,8 @@ def plan_trash(
     for path in files:
         if inside and path.startswith(inside):
             continue
-        dst = free_path(match_case(trash_path(path), spelling), taken)
+        dst = clear_ancestors(match_case(trash_path(path), spelling), files_there, taken)
+        dst = free_path(dst, taken)
         taken.add(dst.casefold())
         learn_spelling(spelling, dst)
         moves.append((path, dst))
@@ -446,10 +464,12 @@ def plan_restore(
     has been taken since comes back as ``name (1).ext`` beside it, and a
     folder on the way that exists in another case is used as it is spelt."""
     taken = server_names(file_paths, folder_paths)
+    files_there = {p.casefold() for p in file_paths}
     spelling = folder_spellings(file_paths, folder_paths)
     moves: list[tuple[str, str]] = []
     for path in paths:
-        dst = free_path(match_case(trash_origin(path, origins), spelling), taken)
+        dst = clear_ancestors(match_case(trash_origin(path, origins), spelling), files_there, taken)
+        dst = free_path(dst, taken)
         taken.add(dst.casefold())
         learn_spelling(spelling, dst)
         moves.append((path, dst))
@@ -467,10 +487,13 @@ def plan_restore_folders(
     reused. ``file_paths`` should include where the batch's files are going,
     so a folder is spelt as they are."""
     spelling = folder_spellings(file_paths, folder_paths)
+    files = {p.casefold() for p in file_paths}
     out: list[tuple[str, str]] = []
     for f in folder_entries:
         if f.startswith(TRASH + "/"):
             dst = match_case(trash_origin(f, origins), spelling, whole=True)
+            # Numbered as its files are (see plan_restore) if the name is now a file.
+            dst = clear_ancestors(dst + "/-", files, files)[: -len("/-")]
             learn_spelling(spelling, dst, whole=True)
             out.append((f, dst))
     return out
@@ -624,10 +647,16 @@ def upload_one(
     progress: ProgressCB | None = None,
     cancel=None,
 ) -> None:
-    """Upload one local file to the server under ``server_path`` (streamed)."""
-    api.upload_file(
-        server_path, local_path, local_path.stat().st_mtime, progress, cancel
-    )
+    """Upload one local file to the server under ``server_path`` (streamed).
+
+    The server refuses a time before 1970 or far in the future, so a bogus one
+    falls back to now, as on the phone.
+    """
+    mtime = local_path.stat().st_mtime
+    now = time.time()
+    if not 0 < mtime <= now:
+        mtime = now
+    api.upload_file(server_path, local_path, mtime, progress, cancel)
 
 
 def upload_files(
@@ -679,6 +708,14 @@ def upload_files(
         if progress is not None:
             progress(done, total or 1)
     return uploaded, failed, False
+
+
+def typed_folder(text: str) -> str:
+    """A typed destination in the server's form ("" for the root), checked as
+    a picked one would be. Raises ValueError for an unsafe path. The leading
+    segment keeps a blank, "/" or "." legal; "..", for one, is still refused."""
+    probe = normalize_rel_path(f"_/{text.strip()}")
+    return "" if probe == "_" else probe[2:]
 
 
 def error_list(errors: list[tuple[str, str]], limit: int = 12) -> str:
@@ -838,6 +875,7 @@ class FileBrowser:
         # Set once a job finishes so its result ("Stopped — put 12 item(s) back")
         # survives the 4s poll; cleared by the next navigation, refresh or job.
         self._quiet_status = False
+        self._closing = False  # the window is waiting for jobs to wind up
         # True while the running delete is one that undoes itself when stopped,
         # so the Stop prompt can say so.
         self._delete_rolls_back = False
@@ -1458,16 +1496,19 @@ class FileBrowser:
         return any(p.startswith(prefix) for p in self._files)
 
     def _normalize_cwd(self) -> None:
-        """If the current folder vanished, climb to the nearest existing one."""
-        while self._cwd and not self._folder_exists(self._cwd):
+        """If the current folder vanished, climb to the nearest existing one.
+        Trash itself stays open: it has no entry until something is in it."""
+        while self._cwd and self._cwd != TRASH and not self._folder_exists(self._cwd):
             self._cwd = parent_folder(self._cwd)
 
     def _render(self) -> None:
         selected = set(self.tree.selection())
+        focus = self.tree.focus()
         self.tree.delete(*self.tree.get_children())
 
         if self._search:
             self._render_search(selected)
+            self._restore_focus(focus)
             return
 
         if self._in_trash():
@@ -1505,7 +1546,14 @@ class FileBrowser:
         for iid in selected:
             if self.tree.exists(iid):
                 self.tree.selection_add(iid)
+        self._restore_focus(focus)
         self._update_context_buttons()
+
+    def _restore_focus(self, iid: str) -> None:
+        """Keep the focused row across a rebuild: Shift-click extends from it,
+        and the arrow keys move from it."""
+        if iid and self.tree.exists(iid):
+            self.tree.focus(iid)
 
     def _render_search(self, selected: set) -> None:
         """Flat list of every file whose path contains the query (any folder).
@@ -2260,7 +2308,11 @@ class FileBrowser:
         self.api = StorageAPI(url, key)
         self.server_label_var.set(f"Files on {url}")
         self._cwd = ""
+        self._files = {}  # the old server's list, until the new one answers
+        self._folders = []
         self.search_var.set("")
+        self._render()
+        self._render_disk()
         self._set_busy(False)  # re-enable the actions now that we're configured
         if self._poll_job is None:
             self._load_initial()  # first-ever configuration → start loading + polling
@@ -2359,6 +2411,9 @@ class FileBrowser:
             folder = dir_var.get().strip()
             if not raw_url or not key:
                 err_var.set("Enter both a server URL and an API key.")
+                return
+            if not key.isascii():
+                err_var.set("That API key has characters no server key can contain.")
                 return
             # "server-laptop:8000" gains its http://, like the Windows installer.
             url = normalize_server_url(raw_url)
@@ -2461,8 +2516,12 @@ class FileBrowser:
         result: dict[str, str | None] = {"value": None}
 
         def ok() -> None:
-            v = var.get().strip().strip("/")
-            result["value"] = "" if v in ("", "(root)") else v
+            v = var.get().strip()
+            try:
+                result["value"] = "" if v == "(root)" else typed_folder(v)
+            except ValueError as exc:
+                messagebox.showerror("Invalid folder", str(exc), parent=dlg)
+                return
             dlg.destroy()
 
         def cancel() -> None:
@@ -2498,10 +2557,6 @@ class FileBrowser:
         if dest is None:
             return  # cancelled
         self._move_selection(files, folders, dest)
-
-    def _do_move_paths(self, paths: list[str], dest: str) -> None:
-        """Move plain files into ``dest`` (the drag-and-drop path)."""
-        self._move_selection(paths, [], dest)
 
     def _move_folder(self, src_folder: str, dest: str) -> None:
         """Nest a whole folder under ``dest``, keeping its own name."""
@@ -2542,6 +2597,8 @@ class FileBrowser:
                 self.status.set("Nothing to move — it's already there.")
             return
         n = len(moves)
+        count = max(n, len(folder_moves))
+        total = count + len(skipped)  # skipped items show up as errors
 
         def body(cancelled: threading.Event) -> None:
             self._ui(self._update_task, TASK_MOVE, 0, None)
@@ -2579,9 +2636,9 @@ class FileBrowser:
                     self.api.delete_folder(src)
                 except Exception as exc:
                     errors.append((src, str(exc)))
-            self._ui(self._move_done, cancelled.is_set(), "Moved", n, errors)
+            self._ui(self._move_done, cancelled.is_set(), "Moved", total, errors)
 
-        self._enqueue_op(f"Move {max(n, len(folder_moves))} item(s)", body)
+        self._enqueue_op(f"Move {count} item(s)", body)
 
     def _move_done(
         self, stopped: bool, verb: str, n: int, errors: list[tuple[str, str]]
@@ -2590,7 +2647,7 @@ class FileBrowser:
         self._finish_job(stopped, verb, n, errors)
 
     def _bulk_done(self, verb: str, n: int, errors: list[tuple[str, str]]) -> None:
-        ok = n - len(errors)
+        ok = max(0, n - len(errors))
         if errors:
             self.status.set(f"{verb} {ok} of {n}.")
             messagebox.showwarning(
@@ -2947,6 +3004,7 @@ class FileBrowser:
     def _delete_forever(self, paths: list[str], folder_entries: list[str]) -> None:
         """The irreversible step: drop items from the server for good."""
         n = len(paths)
+        count = max(n, len(folder_entries))
 
         def body(cancelled: threading.Event) -> None:
             self._ui(self._update_task, TASK_DELETE, 0, None)
@@ -2968,9 +3026,9 @@ class FileBrowser:
                         self.api.delete_folder(entry)
                     except Exception:
                         pass
-            self._ui(self._delete_done, cancelled.is_set(), "Deleted", n, errors)
+            self._ui(self._delete_done, cancelled.is_set(), "Deleted", count, errors)
 
-        self._enqueue_op(f"Delete {n} forever", body)
+        self._enqueue_op(f"Delete {count} forever", body)
 
     def _empty_trash(self) -> None:
         paths = paths_under(TRASH, self._files)
@@ -3126,6 +3184,37 @@ class FileBrowser:
             )
         self._poll_now(silent=True)  # show the newly uploaded files
 
+    def request_close(self) -> None:
+        """The window's close button: with jobs running, ask first, then stop
+        them and close once they've wound up, so no ``.part`` file or half-moved
+        folder stays behind. A second click stops waiting."""
+        if self._closing:
+            self._finish_close()
+            return
+        if self._lanes_busy() and not messagebox.askyesno(
+            "Stop running jobs?",
+            "Jobs are still running.\n\nStop them and close? A folder delete that's "
+            "under way is put back first.",
+            default="no",
+        ):
+            return
+        self._closing = True
+        self._transfers.close()
+        self._ops.close()
+        self.status.set("Stopping jobs — close the window again to quit now.")
+        self._close_when_idle()
+
+    def _close_when_idle(self) -> None:
+        # Polled, not joined: a job's last steps need this thread's event loop.
+        if self._lanes_busy():
+            self.root.after(100, self._close_when_idle)
+        else:
+            self._finish_close()
+
+    def _finish_close(self) -> None:
+        self.close()
+        self.root.destroy()
+
     def close(self) -> None:
         # Stop queued work and ask anything in flight to wind up, so the window
         # closes instead of waiting on a long transfer.
@@ -3203,7 +3292,7 @@ def main() -> int:
     root = TkinterDnD.Tk() if _HAS_DND else tk.Tk()
     _set_window_icon(root)
     app = FileBrowser(root, config, config_error=error, config_draft=draft)
-    root.protocol("WM_DELETE_WINDOW", lambda: (app.close(), root.destroy()))
+    root.protocol("WM_DELETE_WINDOW", app.request_close)
     root.mainloop()
     return 0
 

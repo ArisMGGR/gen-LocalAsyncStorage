@@ -186,6 +186,7 @@
     <string name="settings_key_hint">the same key as the server</string>
     <string name="save">Save</string>
     <string name="settings_incomplete">Enter both a server URL and an API key.</string>
+    <string name="settings_bad_key">That API key has characters no server key can contain.</string>
     <string name="settings_saved">Saved.</string>
     <string name="settings_locked">Settings can be changed once the running and queued jobs have finished (or been stopped).</string>
 </resources>

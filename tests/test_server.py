@@ -609,8 +609,56 @@ class ConfigTest(unittest.TestCase):
     def test_logs_default_to_a_logs_folder(self):
         self.assertEqual(self.load("").log_dir, Path("logs").resolve())
 
+    def test_the_examples_placeholder_key_is_refused(self):
+        # F-066: long enough to pass, and published in the repo.
+        from server.config import load_config
+
+        example = Path(__file__).resolve().parent.parent / "server-config.example.toml"
+        with self.assertRaisesRegex(RuntimeError, "placeholder"):
+            load_config(example)
+
+    def test_a_port_out_of_range_is_refused(self):
+        # F-079: it passed here, then failed inside uvicorn.
+        for port in (0, 70000, -1):
+            with self.assertRaisesRegex(RuntimeError, "65535", msg=port):
+                self.load(f"port = {port}\n")
+
+    def test_every_unusable_file_is_a_config_error(self):
+        # F-078: these escaped as tracebacks, past the "not started" log line.
+        from server.config import load_config
+
+        path = Path(self._tmp.name) / "server-config.toml"
+        for raw in (b'[server]\napi_key = "\xff"\n', b'server = "x"\n', b'limits = 1\n'):
+            path.write_bytes(raw)
+            with self.assertRaises(RuntimeError, msg=raw):
+                load_config(path)
+
+    def test_a_non_finite_upload_timeout_is_refused(self):
+        # F-100: NaN passed "positive" and crashed the event loop at the first upload.
+        for value in ("nan", "inf"):
+            with self.assertRaisesRegex(RuntimeError, "upload_timeout", msg=value):
+                self.load(f"[limits]\nupload_timeout = {value}\n")
+
     def test_values_are_kept(self):
         self.assertEqual(self.load('host = "100.1.2.3"\n').host, "100.1.2.3")
+
+
+class BlobStoreTest(unittest.TestCase):
+    def test_a_failed_write_leaves_no_folders_behind(self):
+        # F-073: empty x/ stayed on disk, so a later file "x" was refused.
+        from server.storage import BlobStore
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = BlobStore(tmp.name)
+        with self.assertRaises(ValueError):
+            with store.staged_write("x/y/z.txt", 1.0) as fh:
+                fh.write(b"a")
+                raise ValueError("hash mismatch")
+        self.assertEqual(list(Path(tmp.name).iterdir()), [])
+        with store.staged_write("x", 1.0) as fh:
+            fh.write(b"b")
+        self.assertEqual((Path(tmp.name) / "x").read_bytes(), b"b")
 
 
 class DailyFileHandlerTest(unittest.TestCase):

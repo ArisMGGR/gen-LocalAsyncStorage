@@ -5,8 +5,8 @@ request. All methods raise on non-2xx responses so the app can surface errors
 clearly; :func:`describe_error` turns one into a short message for the user.
 
 :meth:`upload_file` / :meth:`download_to_file` stream to and from disk in
-chunks, report progress, and don't impose a read/write timeout, so multi-GB
-transfers neither exhaust memory nor time out mid-flight.
+chunks, report progress, and time out only on silence, never on total length,
+so multi-GB transfers neither exhaust memory nor get cut off mid-flight.
 """
 
 from __future__ import annotations
@@ -23,6 +23,10 @@ from common.hashing import FileEntry, sha256_file
 
 # Chunk size for streamed transfers. 1 MiB keeps memory flat on huge files.
 _CHUNK = 1024 * 1024
+
+# How long an upload waits for the server's answer once its body is sent: the
+# server still has to flush a file of up to many GB to disk.
+_UPLOAD_ANSWER_TIMEOUT = 300.0
 
 # Progress callback: (bytes_transferred_so_far, total_bytes). total may be 0 when
 # unknown.
@@ -64,11 +68,15 @@ class StorageAPI:
             headers={"X-API-Key": api_key},
             timeout=timeout,
         )
-        # For big streamed transfers, keep the connect/pool timeout but let data
-        # flow without a read/write deadline (a slow-but-steady multi-GB upload
-        # must not be killed). The server has its own idle timeout to drop truly
-        # stalled connections.
-        self._transfer_timeout = httpx.Timeout(timeout, read=None, write=None)
+        # These limit each read, not the whole transfer, so a slow-but-steady
+        # multi-GB file is never killed, while a stalled one fails instead of
+        # hanging past Stop. An upload's write has no limit: it blocks while the
+        # server has every upload slot in use, and the server's own idle timeout
+        # drops one that stalls.
+        self._download_timeout = httpx.Timeout(timeout)
+        self._upload_timeout = httpx.Timeout(
+            timeout, read=max(timeout, _UPLOAD_ANSWER_TIMEOUT), write=None
+        )
         # The server's per-file upload cap, learned from the manifest; None until
         # fetched, or when an older server doesn't report it.
         self.max_file_bytes: int | None = None
@@ -167,7 +175,7 @@ class StorageAPI:
                 # generator body with no Content-Length).
                 "Content-Length": str(total),
             },
-            timeout=self._transfer_timeout,
+            timeout=self._upload_timeout,
         )
         # Surface the server's reason, e.g. "a file named 'x' already exists".
         self._check(r)
@@ -198,16 +206,18 @@ class StorageAPI:
             "GET",
             "/download",
             params={"path": path},
-            timeout=self._transfer_timeout,
+            timeout=self._download_timeout,
         ) as r:
-            r.raise_for_status()
+            if r.is_error:
+                r.read()  # a streamed body must be read before its detail can be
+            self._check(r)
             sha = r.headers.get("X-Content-SHA256", "")
             mtime = float(r.headers.get("X-Mtime", "0"))
             total = int(r.headers.get("Content-Length", "0") or 0)
 
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(
-                dir=dest_path.parent, prefix=f".{dest_path.name}.", suffix=".part"
+                dir=dest_path.parent, prefix=".download-", suffix=".part"
             )
             hasher = hashlib.sha256()
             received = 0

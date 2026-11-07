@@ -10,7 +10,9 @@ import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.widget.Toast;
@@ -471,6 +473,11 @@ public class TransferService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
         nm.notify((int) (System.nanoTime() & 0x7fffffff), n);
+        // Declining notifications is allowed, and this is the only word of a failure.
+        if (!nm.areNotificationsEnabled()) {
+            new Handler(Looper.getMainLooper()).post(() ->
+                    Toast.makeText(getApplicationContext(), text, Toast.LENGTH_LONG).show());
+        }
     }
 
     private void startForegroundCompat(Notification n) {

@@ -23,7 +23,7 @@ cloud holding your files.
   and delete *tombstones*). One shared API key guards every request.
 - The **client** is a desktop app that lists the server's files live. You
   download the ones you want into a download folder you pick once, and upload
-  new files by dragging them onto the window.
+  new files by dragging them onto the drop panel.
 - The **server is the source of truth**. A downloaded file is simply yours: the
   app never tracks, updates or deletes it afterwards.
 
@@ -247,7 +247,8 @@ folder view.
   touched.
 - **Open download folder** opens your download folder in your file manager.
 
-**Upload new files** by dragging files or folders onto the window (or click
+**Upload new files** by dragging files or folders onto the drop panel on the
+right of the window (or click
 **Add files…**) — they land **in the folder you're currently viewing**. A
 confirmation prompt lists what will be sent before anything is uploaded; folders
 are included recursively. Uploads never replace anything: a file or folder whose

@@ -269,7 +269,7 @@ function ConvertTo-FolderPath([string]$Text) {
     $p = [Environment]::ExpandEnvironmentVariables($Text.Trim().Trim('"'))
     if ($p -eq '~' -or $p -like '~\*' -or $p -like '~/*') { $p = $env:USERPROFILE + $p.Substring(1) }
     if ($p -notmatch '^[A-Za-z]:[\\/]' -and $p -notmatch '^\\\\[^\\]') { return $null }
-    try { return [IO.Path]::GetFullPath($p).TrimEnd('\') } catch { return $null }
+    try { $full = [IO.Path]::GetFullPath($p); if ($full -match '^[A-Za-z]:\\$') { return $full }; return $full.TrimEnd('\') } catch { return $null }
 }
 
 # Fresh setup: the folder picker opens straight away. Either way the result is
@@ -485,7 +485,10 @@ if (-not (Confirm-Choice 'Go ahead?' 'Y')) {
 Step 5 'Applying'
 # =============================================================================
 try {
-    New-Item -ItemType Directory -Force -Path $downloadDir -ErrorAction Stop | Out-Null
+    # New-Item refuses a drive root, which always exists anyway.
+    if (-not (Test-Path -LiteralPath $downloadDir -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $downloadDir -ErrorAction Stop | Out-Null
+    }
 } catch {
     Die "couldn't create the download folder ${downloadDir}: $($_.Exception.Message)"
 }

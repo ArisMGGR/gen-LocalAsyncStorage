@@ -46,6 +46,7 @@ Settings and their environment-variable overrides:
 
 from __future__ import annotations
 
+import math
 import os
 import tomllib
 from dataclasses import dataclass
@@ -72,6 +73,10 @@ _DEFAULT_UPLOAD_TIMEOUT = 60.0
 # generator in the docs produces ~43 chars, so this only catches weak keys set
 # by hand. Guards against footguns, not a substitute for a random key.
 _MIN_API_KEY_LEN = 16
+
+# The placeholder in server-config.example.toml. It's long enough to pass the
+# length check, but it is public, so a copied example must not start a server.
+_EXAMPLE_API_KEY = "PASTE_A_LONG_RANDOM_KEY_HERE"
 
 # Where per-day log files go when log_dir isn't set.
 DEFAULT_LOG_DIR = "./logs"
@@ -123,7 +128,7 @@ def _load_file(path: Path) -> dict[str, Any]:
     try:
         with open(path, "rb") as fh:
             return tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise RuntimeError(f"Could not read config file {path}: {exc}") from exc
 
 
@@ -150,6 +155,8 @@ def load_config(path: str | Path | None = None) -> ServerConfig:
     raw = _load_file(cfg_path)
     server = raw.get("server", {}) or {}
     limits = raw.get("limits", {}) or {}
+    if not isinstance(server, dict) or not isinstance(limits, dict):
+        raise RuntimeError(f"[server] and [limits] in {cfg_path} must be tables")
 
     api_key = str(_resolve("STORAGE_API_KEY", server, "api_key", "")).strip()
     if not api_key:
@@ -158,6 +165,12 @@ def load_config(path: str | Path | None = None) -> ServerConfig:
             f"({cfg_path}) — copy {_DEFAULT_CONFIG_FILENAME.replace('.toml', '.example.toml')} "
             "to get started — or set the STORAGE_API_KEY environment variable. "
             "Generate one with: "
+            "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+    if api_key == _EXAMPLE_API_KEY:
+        raise RuntimeError(
+            f"[server].api_key in {cfg_path} is still the example's placeholder. "
+            "Generate a key with: "
             "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
         )
     if len(api_key) < _MIN_API_KEY_LEN:
@@ -186,6 +199,8 @@ def load_config(path: str | Path | None = None) -> ServerConfig:
         port = int(_resolve("STORAGE_PORT", server, "port", 8000))
     except (TypeError, ValueError):
         raise RuntimeError("port must be an integer")
+    if not 1 <= port <= 65535:
+        raise RuntimeError("port must be from 1 to 65535")
 
     try:
         max_file_bytes = int(
@@ -231,7 +246,7 @@ def load_config(path: str | Path | None = None) -> ServerConfig:
         )
     except (TypeError, ValueError):
         raise RuntimeError("upload_timeout must be a number")
-    if upload_timeout <= 0:
+    if not math.isfinite(upload_timeout) or upload_timeout <= 0:
         raise RuntimeError("upload_timeout must be a positive number of seconds")
 
     return ServerConfig(

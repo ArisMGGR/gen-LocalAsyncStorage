@@ -115,7 +115,8 @@ fi
 if [ -f "$CONFIG" ]; then
   read -r -p "==> Also delete the config file (holds the API key)? $CONFIG [y/N] " ans
   if [[ "${ans:-N}" =~ ^[Yy] ]]; then
-    as_user rm -f "$CONFIG"
+    # The installer's backup of it holds the key too.
+    as_user rm -f "$CONFIG" "$CONFIG.bak"
     echo "    removed $CONFIG"
   else
     echo "    keeping $CONFIG"

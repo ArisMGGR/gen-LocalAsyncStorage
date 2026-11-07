@@ -25,11 +25,6 @@ def sha256_file(path: str | Path) -> str:
     return h.hexdigest()
 
 
-def sha256_bytes(data: bytes) -> str:
-    """Return the hex sha256 digest of an in-memory bytes object."""
-    return hashlib.sha256(data).hexdigest()
-
-
 @dataclass(frozen=True)
 class FileEntry:
     """One row of a manifest: the identity of a single file.

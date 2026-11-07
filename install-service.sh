@@ -357,6 +357,10 @@ elif [ -f "$CONFIG" ]; then
 else
   say "    Not importing — setting up fresh."
 fi
+# The example config's placeholder key counts as "no key yet".
+if [ "$C_API_KEY" = "PASTE_A_LONG_RANDOM_KEY_HERE" ]; then
+  C_API_KEY=""
+fi
 
 # =============================================================================
 step 3 "Settings"
@@ -436,18 +440,21 @@ if [ "$ASK_SETTINGS" -eq 1 ]; then
   fi
 
   # --- Limits
+  # The GiB shown is rounded, so accepting it keeps the exact value already set.
+  shown="$(bytes_to_gib "$C_MAX_TOTAL")"
   while true; do
-    ask gib "Total storage limit in GiB (0 = unlimited)" "$(bytes_to_gib "$C_MAX_TOTAL")"
+    ask gib "Total storage limit in GiB (0 = unlimited)" "$shown"
     [[ "$gib" =~ ^[0-9]+([.][0-9]+)?$ ]] && break
     say "    Enter a number, e.g. 100 or 0."
   done
-  C_MAX_TOTAL="$(gib_to_bytes "$gib")"
+  [ "$gib" = "$shown" ] || C_MAX_TOTAL="$(gib_to_bytes "$gib")"
+  shown="$(bytes_to_gib "$C_MAX_FILE")"
   while true; do
-    ask gib "Largest single upload in GiB" "$(bytes_to_gib "$C_MAX_FILE")"
+    ask gib "Largest single upload in GiB" "$shown"
     [[ "$gib" =~ ^[0-9]+([.][0-9]+)?$ ]] && [ "$(gib_to_bytes "$gib")" -gt 0 ] && break
     say "    Enter a number above 0, e.g. 10."
   done
-  C_MAX_FILE="$(gib_to_bytes "$gib")"
+  [ "$gib" = "$shown" ] || C_MAX_FILE="$(gib_to_bytes "$gib")"
 fi
 [ -z "$C_HOST" ] && C_HOST="127.0.0.1"
 

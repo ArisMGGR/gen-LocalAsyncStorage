@@ -183,6 +183,25 @@ public final class Plans {
         return names;
     }
 
+    /**
+     * {@code path} with any folder on the way that is really a file numbered like
+     * a folder ("Trash/report/b.txt" beside file "Trash/report" becomes
+     * "Trash/report (1)/b.txt"): the server refuses anything beneath a file.
+     * Mirrors the desktop client's clear_ancestors.
+     */
+    static String clearAncestors(String path, Set<String> files, Set<String> taken) {
+        String out = path;
+        for (int slash = out.indexOf('/'); slash >= 0; slash = out.indexOf('/', slash + 1)) {
+            String node = out.substring(0, slash);
+            if (files.contains(lower(node))) {
+                String free = freePath(node, q -> taken.contains(lower(q)), true);
+                out = free + out.substring(slash);
+                slash = free.length();
+            }
+        }
+        return out;
+    }
+
     // -- Trash and restore ------------------------------------------------------------
 
     /** Where each deleted item lands in Trash. */
@@ -205,12 +224,15 @@ public final class Plans {
                                       Collection<String> filePaths,
                                       Collection<String> folderPaths) {
         Set<String> taken = serverNames(filePaths, folderPaths);
+        Set<String> filesThere = new HashSet<>();
+        for (String p : filePaths) filesThere.add(lower(p));
         Map<String, String> spelling = folderSpellings(filePaths, folderPaths);
         // Trash itself is never respelt onto a user's "trash" (see trashBlocker).
         spelling.put(lower(TRASH), TRASH);
         TrashPlan plan = new TrashPlan();
         for (String folder : folders) {
-            String dst = freePath(matchCase(trashPath(folder), spelling, false),
+            String dst = freePath(
+                    clearAncestors(matchCase(trashPath(folder), spelling, false), filesThere, taken),
                     p -> taken.contains(lower(p)), true);
             taken.add(lower(dst));
             learnSpelling(spelling, dst, true);
@@ -223,7 +245,8 @@ public final class Plans {
         }
         for (String p : files) {
             if (underAny(p, folders)) continue;
-            String dst = freePath(matchCase(trashPath(p), spelling, false),
+            String dst = freePath(
+                    clearAncestors(matchCase(trashPath(p), spelling, false), filesThere, taken),
                     q -> taken.contains(lower(q)), false);
             taken.add(lower(dst));
             learnSpelling(spelling, dst, false);
@@ -302,10 +325,15 @@ public final class Plans {
                                                     Collection<String> filePaths,
                                                     Collection<String> folderPaths) {
         Map<String, String> spelling = folderSpellings(filePaths, folderPaths);
+        Set<String> files = new HashSet<>();
+        for (String p : filePaths) files.add(lower(p));
         List<String[]> out = new ArrayList<>();
         for (String f : folderEntries) {
             if (!f.startsWith(TRASH + "/")) continue;
             String dst = matchCase(trashOrigin(f, origins), spelling, true);
+            // Numbered as its files are (see planRestore) if the name is now a file.
+            String checked = clearAncestors(dst + "/-", files, files);
+            dst = checked.substring(0, checked.length() - 2);
             learnSpelling(spelling, dst, true);
             out.add(new String[]{f, dst});
         }
@@ -322,10 +350,13 @@ public final class Plans {
                                              Collection<String> folderPaths,
                                              Map<String, String> origins) {
         Set<String> taken = serverNames(filePaths, folderPaths);
+        Set<String> filesThere = new HashSet<>();
+        for (String p : filePaths) filesThere.add(lower(p));
         Map<String, String> spelling = folderSpellings(filePaths, folderPaths);
         List<String[]> moves = new ArrayList<>();
         for (String p : paths) {
-            String dst = freePath(matchCase(trashOrigin(p, origins), spelling, false),
+            String dst = freePath(
+                    clearAncestors(matchCase(trashOrigin(p, origins), spelling, false), filesThere, taken),
                     q -> taken.contains(lower(q)), false);
             taken.add(lower(dst));
             learnSpelling(spelling, dst, false);

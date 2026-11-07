@@ -31,6 +31,10 @@ public class SettingsActivity extends AppCompatActivity {
                 Toast.makeText(this, R.string.settings_incomplete, Toast.LENGTH_SHORT).show();
                 return;
             }
+            if (!isAscii(key)) {
+                Toast.makeText(this, R.string.settings_bad_key, Toast.LENGTH_LONG).show();
+                return;
+            }
             String normalized = normalizeUrl(url);
             if (normalized == null) {
                 Toast.makeText(this, R.string.settings_bad_url, Toast.LENGTH_LONG).show();
@@ -40,6 +44,14 @@ public class SettingsActivity extends AppCompatActivity {
             Toast.makeText(this, R.string.settings_saved, Toast.LENGTH_SHORT).show();
             finish();
         });
+    }
+
+    /** An HTTP header can't carry anything else, as the desktop's Settings says too. */
+    static boolean isAscii(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) > 127) return false;
+        }
+        return true;
     }
 
     /**

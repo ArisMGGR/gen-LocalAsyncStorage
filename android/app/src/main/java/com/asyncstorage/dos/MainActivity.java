@@ -58,10 +58,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class MainActivity extends AppCompatActivity implements FileAdapter.Listener {
 
     private static final long POLL_MS = 4000;
+    private static final String STATE_CWD = "cwd";
+    private static final String STATE_CWD_BEFORE_TRASH = "cwd_before_trash";
 
     private Prefs prefs;
     private SafStore store;
     private StorageApi api;
+    private String connectedUrl = "";  // what api talks to, to spot a Settings change
+    private String connectedKey = "";
     private FileAdapter adapter;
 
     private TextView status;
@@ -137,8 +141,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     // True while the running delete is one that undoes itself when stopped, so the
     // cancel prompt can say so instead of warning that finished work is kept.
     private boolean deleteRollsBack = false;
+    // Set once a job finishes so its result survives the 4s poll; cleared by the
+    // next navigation or refresh, as on the desktop.
+    private boolean quietStatus = false;
     private boolean busy = false;
     private boolean polling = false;
+    // Manifest fetches queued or running on io; a poll skips its turn while any are.
+    private int fetchesPending = 0;
     private boolean promptedSettings = false;
     private boolean promptedFolder = false;
 
@@ -161,6 +170,11 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
                 claimedDownloads = new java.util.HashSet<>(claimed == null
                         ? Collections.emptyList() : java.util.Arrays.asList(claimed));
                 refreshQueue();
+                // The finish broadcast is missed while paused, so a transfer that
+                // ended in the background clears its row here.
+                if (currentTransferId < 0 && queueLabels.length == 0 && taskActive[TASK_TRANSFER]) {
+                    finishTask(TASK_TRANSFER);
+                }
                 return;
             }
             if (i.getBooleanExtra(TransferService.P_FINISHED, false)) {
@@ -181,7 +195,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     private final Runnable pollTick = new Runnable() {
         @Override
         public void run() {
-            if (!busy) fetchManifest(false);
+            if (!busy && fetchesPending == 0) fetchManifest(false);
             if (polling) ui.postDelayed(this, POLL_MS);
         }
     };
@@ -273,7 +287,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
 
         settingsLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
-                result -> reloadConfig());
+                result -> onSettingsClosed());
         pickLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -301,6 +315,19 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         }
 
         reloadConfig();
+        // Android recreated this screen (e.g. it was reclaimed in the background).
+        if (savedInstanceState != null && api != null) {
+            cwd = savedInstanceState.getString(STATE_CWD, "");
+            cwdBeforeTrash = savedInstanceState.getString(STATE_CWD_BEFORE_TRASH, "");
+            render();
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle out) {
+        super.onSaveInstanceState(out);
+        out.putString(STATE_CWD, cwd);
+        out.putString(STATE_CWD_BEFORE_TRASH, cwdBeforeTrash);
     }
 
     @Override
@@ -356,7 +383,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
             return;
         }
         promptedSettings = false;
-        api = new StorageApi(prefs.serverUrl(), prefs.apiKey());
+        connectedUrl = prefs.serverUrl();
+        connectedKey = prefs.apiKey();
+        api = new StorageApi(connectedUrl, connectedKey);
         cwd = "";
         files = new ArrayList<>();
         folders = new ArrayList<>();
@@ -370,6 +399,15 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
             promptedFolder = true;
             promptFolder();
         }
+    }
+
+    /** Settings closed: reconnect only if the server changed; the view stays put otherwise. */
+    private void onSettingsClosed() {
+        if (api != null && prefs.serverUrl().equals(connectedUrl)
+                && prefs.apiKey().equals(connectedKey)) {
+            return;
+        }
+        reloadConfig();
     }
 
     private void openSettings() {
@@ -429,12 +467,17 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
 
     private void fetchManifest(boolean showLoading) {
         if (api == null) return;
-        if (showLoading) status.setText(R.string.loading);
+        if (showLoading) {
+            quietStatus = false;
+            status.setText(R.string.loading);
+        }
+        fetchesPending++;
         io.execute(() -> {
             StorageApi.ManifestData data;
             try {
                 data = api.fetchManifest();
             } catch (Exception ex) {
+                ui.post(() -> fetchesPending--);
                 if (showLoading) {
                     // A rejected key isn't a connection problem: say which it is.
                     boolean rejected = ex instanceof StorageApi.HttpError
@@ -453,6 +496,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
             long limit = data.maxFileBytes;
             long diskTotal = data.diskTotal, diskUsed = data.diskUsed, diskFree = data.diskFree;
             ui.post(() -> {
+                fetchesPending--;
                 maxFileBytes = limit;
                 renderDisk(diskTotal, diskUsed, diskFree);
                 applyManifest(live, fold);
@@ -479,7 +523,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         for (FileEntry e : newFiles) fileIndex.put(e.path, e);
         normalizeCwd();
         render();
-        if (!busy) {
+        if (!busy && !quietStatus && adapter.selectedCount() == 0) {
             if (inTrash()) {
                 status.setText(R.string.in_trash_status);
             } else {
@@ -501,9 +545,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         return fileIndex.get(path);
     }
 
-    /** If the current folder vanished, climb to the nearest existing one. */
+    /**
+     * If the current folder vanished, climb to the nearest existing one. Trash
+     * itself stays open: it has no entry until something is in it.
+     */
     private void normalizeCwd() {
-        while (!cwd.isEmpty() && !FolderNav.exists(cwd, filePaths(), folders)) {
+        while (!cwd.isEmpty() && !cwd.equals(TRASH) && !FolderNav.exists(cwd, filePaths(), folders)) {
             cwd = FolderNav.parent(cwd);
         }
     }
@@ -794,6 +841,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     }
 
     private void navigate(String folder) {
+        quietStatus = false;
         cwd = folder;
         render();
         if (inTrash()) {
@@ -974,7 +1022,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
 
         if (moves.isEmpty() && folderMoves.isEmpty() && errors.isEmpty()) return;
 
-        final int total = moves.size();
+        // Refused items are in errors already, so they count towards the total.
+        final int total = Math.max(moves.size(), folderMoves.size()) + errors.size();
         enqueueOp(getString(R.string.q_move, Math.max(total, 1)), (cancelled) -> {
             ui.post(this::startMoveBar);
             runMoves(folderMoves, moves, cancelled, errors);
@@ -1154,7 +1203,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
             return;
         }
 
-        final int total = moves.size();
+        final int total = Math.max(moves.size(), folderMoves.size());
         enqueueOp(getString(R.string.q_move, Math.max(total, 1)), (cancelled) -> {
             ui.post(this::startMoveBar);
             List<String> errors = new ArrayList<>();
@@ -1616,6 +1665,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     private void finishOp(boolean cancelled, int failTitleRes, int okMsgRes, int total,
                           List<String> errors) {
         if (cancelled) {
+            quietStatus = true;
             status.setText(R.string.op_cancelled);
             fetchManifest(false);
         } else {
@@ -1653,10 +1703,11 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
 
     private void bulkDone(int failTitleRes, int okMsgRes, int total, List<String> errors) {
         // No setBusy here — delete/move run in the background without locking the UI.
+        quietStatus = true;
         if (errors.isEmpty()) {
             status.setText(getString(okMsgRes, total));
         } else {
-            status.setText(getString(R.string.bulk_partial, total - errors.size(), total));
+            status.setText(getString(R.string.bulk_partial, Math.max(0, total - errors.size()), total));
             alert(getString(failTitleRes), errorList(errors));
         }
         fetchManifest(false);
@@ -1758,6 +1809,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         final int total = trashed.size();
         if (total == 0) {  // nothing had been moved yet
             ui.post(() -> {
+                quietStatus = true;
                 status.setText(R.string.op_cancelled);
                 fetchManifest(false);
             });
@@ -1779,6 +1831,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
         final int failed = errors.size();
         ui.post(() -> {
             endMoveBar();
+            quietStatus = true;
             if (failed == 0) {
                 status.setText(getString(R.string.cancelled_restored_n, total));
             } else {
@@ -1897,7 +1950,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
 
     /** Permanently delete items from the server (the irreversible step). */
     private void doDeleteForever(List<FileEntry> items, List<String> folderEntries) {
-        final int total = items.size();
+        final int files = items.size();
+        final int total = Math.max(files, folderEntries.size());
         enqueueOp(getString(R.string.q_forever, total), (cancelled) -> {
             ui.post(this::startDeleteBar);
             List<String> errors = new ArrayList<>();
@@ -1910,7 +1964,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
                 } catch (Exception ex) {
                     errors.add(e.path + ": " + ex.getMessage());
                 }
-                postDeleteProgress(lastPct, ++done, total);
+                postDeleteProgress(lastPct, ++done, files);
             }
             if (!cancelled.get()) {
                 for (String f : folderEntries) {
@@ -2181,6 +2235,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     }
 
     private void alert(String title, String message) {
+        // A background op can outlive the Activity; a dialog then would crash it.
+        if (isFinishing() || isDestroyed()) return;
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)
