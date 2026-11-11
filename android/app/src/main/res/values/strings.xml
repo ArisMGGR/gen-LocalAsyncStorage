@@ -103,12 +103,12 @@
     <string name="folder_action_restore">Restore folder</string>
     <string name="folder_action_delete_forever">Delete folder forever</string>
     <string name="delete_failed">Delete failed</string>
-    <string name="deleted_n">Deleted %d file(s).</string>
+    <string name="deleted_n">Deleted %d item(s).</string>
 
     <!-- multi-select -->
     <string name="selected_n">%d selected</string>
     <string name="move_title_n">Move %d items to:</string>
-    <string name="moved_n">Moved %d file(s).</string>
+    <string name="moved_n">Moved %d item(s).</string>
     <string name="bulk_partial">%1$d of %2$d done.</string>
 
     <!-- upload -->

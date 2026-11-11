@@ -682,6 +682,17 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(app.status.get(), "Moved 1 of 2.")
         self.assertEqual(self.server.live(), ["c/e/a.txt"])
 
+    def test_emptying_trash_counts_only_what_was_in_it(self):
+        # Trash's own entry made one empty folder read "Deleted 2 items".
+        self.server.db.create_folder("Trash/empty")
+        app = self.open_window()
+        self.run_ops_inline()
+        with mock.patch.object(gui.messagebox, "askyesno", return_value=True):
+            app._empty_trash()
+        self.flush()
+        self.assertEqual(app.status.get(), "Deleted 1 item.")
+        self.assertEqual(self.server.db.list_folders(), [])
+
     def test_trash_keeps_a_folder_whose_copy_failed(self):
         # F-046: _carry_folders keeps an original whose Trash copy failed.
         for f in ("a", "a/empty"):

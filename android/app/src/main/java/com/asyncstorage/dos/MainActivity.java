@@ -1951,7 +1951,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     /** Permanently delete items from the server (the irreversible step). */
     private void doDeleteForever(List<FileEntry> items, List<String> folderEntries) {
         final int files = items.size();
-        final int total = Math.max(files, folderEntries.size());
+        // Trash's own entry isn't something the user deleted.
+        int folderCount = 0;
+        for (String f : folderEntries) if (!f.equals(TRASH)) folderCount++;
+        final int total = Math.max(files, folderCount);
         enqueueOp(getString(R.string.q_forever, total), (cancelled) -> {
             ui.post(this::startDeleteBar);
             List<String> errors = new ArrayList<>();
@@ -2235,8 +2238,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     }
 
     private void alert(String title, String message) {
-        // A background op can outlive the Activity; a dialog then would crash it.
-        if (isFinishing() || isDestroyed()) return;
+        // A background op can outlive the Activity; a dialog then can crash it,
+        // so say it in a toast instead of losing the error.
+        if (isFinishing() || isDestroyed()) {
+            Toast.makeText(getApplicationContext(), title + ": " + message, Toast.LENGTH_LONG).show();
+            return;
+        }
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)

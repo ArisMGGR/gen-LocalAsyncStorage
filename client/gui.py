@@ -3004,7 +3004,8 @@ class FileBrowser:
     def _delete_forever(self, paths: list[str], folder_entries: list[str]) -> None:
         """The irreversible step: drop items from the server for good."""
         n = len(paths)
-        count = max(n, len(folder_entries))
+        # Trash's own entry isn't something the user deleted.
+        count = max(n, len([f for f in folder_entries if f != TRASH]))
 
         def body(cancelled: threading.Event) -> None:
             self._ui(self._update_task, TASK_DELETE, 0, None)
