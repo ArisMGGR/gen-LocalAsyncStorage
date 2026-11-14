@@ -9,6 +9,10 @@
         android:title="@string/move_to"
         android:showAsAction="never" />
     <item
+        android:id="@+id/menu_download_folder"
+        android:title="@string/change_download_folder"
+        android:showAsAction="never" />
+    <item
         android:id="@+id/menu_settings"
         android:title="@string/settings_title"
         android:showAsAction="never" />

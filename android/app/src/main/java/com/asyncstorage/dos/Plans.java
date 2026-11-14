@@ -510,7 +510,11 @@ public final class Plans {
         return s == null ? 0 : s;
     }
 
+    /**
+     * A name's case-insensitive identity, as close to the server's casefold() as
+     * Java gets: through upper case first, so "ß" folds to "ss" as it does there.
+     */
     private static String lower(String s) {
-        return s.toLowerCase(Locale.ROOT);
+        return s.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
     }
 }

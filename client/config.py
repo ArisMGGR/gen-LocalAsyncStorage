@@ -103,7 +103,7 @@ def read_config_draft(path: str | Path | None = None) -> ClientConfig | None:
     try:
         with open(cfg_path, "rb") as fh:
             raw = tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError):
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
         return None
     server = raw.get("server") or {}
     client = raw.get("client") or {}
@@ -124,10 +124,16 @@ def load_config(path: str | Path | None = None) -> ClientConfig:
             f"or set STORAGE_CLIENT_CONFIG to its location."
         )
 
-    with open(cfg_path, "rb") as fh:
-        raw = tomllib.load(fh)
+    try:
+        with open(cfg_path, "rb") as fh:
+            raw = tomllib.load(fh)
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise RuntimeError(f"Could not read config file {cfg_path}: {exc}") from exc
 
-    server = raw.get("server", {})
+    server = raw.get("server") or {}
+    client = raw.get("client") or {}
+    if not isinstance(server, dict) or not isinstance(client, dict):
+        raise RuntimeError(f"[server] and [client] in {cfg_path} must be tables")
     raw_url = str(server.get("url", "")).strip()
     api_key = str(server.get("api_key", "")).strip()
     if not raw_url or not api_key:
@@ -141,7 +147,7 @@ def load_config(path: str | Path | None = None) -> ClientConfig:
             "e.g. http://server-laptop:8000"
         )
 
-    download_dir = str(raw.get("client", {}).get("download_dir", "")).strip()
+    download_dir = str(client.get("download_dir", "")).strip()
     return ClientConfig(
         server_url=server_url, api_key=api_key, download_dir=download_dir
     )

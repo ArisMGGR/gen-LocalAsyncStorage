@@ -489,6 +489,27 @@ class ConfigErrorTest(unittest.TestCase):
         self.assertIn("api_key", browser.call_args.kwargs["config_error"])
         self.assertIsNotNone(browser.call_args.kwargs["config_draft"])
 
+    def test_a_file_that_isnt_utf8_or_tables_opens_the_settings(self):
+        # F-104: a non-UTF-8 file killed the app before any window opened.
+        for raw in ('[client]\ndownload_dir = "C:/Λήψεις"\n'.encode("cp1253"),
+                    b'server = "x"\n'):
+            tmp = tempfile.TemporaryDirectory()
+            self.addCleanup(tmp.cleanup)
+            path = Path(tmp.name) / "config.toml"
+            path.write_bytes(raw)
+            browser = mock.Mock()
+            with mock.patch.dict(os.environ, {"STORAGE_CLIENT_CONFIG": str(path)}), \
+                    mock.patch.object(gui, "FileBrowser", browser), \
+                    mock.patch.object(gui, "_HAS_DND", False), \
+                    mock.patch.object(gui.tk, "Tk"), \
+                    mock.patch.object(gui, "_set_window_icon"), \
+                    mock.patch.object(gui, "_set_app_id"):
+                gui.main()
+            _root, config = browser.call_args.args
+            self.assertIsNone(config, raw)
+            self.assertIn("config.toml", browser.call_args.kwargs["config_error"])
+            self.assertNotIn("attribute", browser.call_args.kwargs["config_error"])
+
     def test_no_file_is_a_plain_first_run(self):
         browser = self.start_app(None)
         self.assertIsNone(browser.call_args.kwargs["config_error"])
@@ -692,6 +713,19 @@ class WindowTest(unittest.TestCase):
         self.flush()
         self.assertEqual(app.status.get(), "Deleted 1 item.")
         self.assertEqual(self.server.db.list_folders(), [])
+
+    def test_delete_forever_asks_with_the_count_it_will_report(self):
+        # F-106: an empty folder was "Permanently delete 0 item(s)".
+        self.server.db.create_folder("Trash/empty")
+        app = self.open_window()
+        self.run_ops_inline()
+        app._navigate(gui.TRASH)
+        app.tree.selection_set("dir:Trash/empty")
+        with mock.patch.object(gui.messagebox, "askyesno", return_value=True) as ask:
+            app._delete_forever_selected()
+        self.flush()
+        self.assertIn("delete 1 item(s)", ask.call_args.args[1])
+        self.assertEqual(app.status.get(), "Deleted 1 item.")
 
     def test_trash_keeps_a_folder_whose_copy_failed(self):
         # F-046: _carry_folders keeps an original whose Trash copy failed.

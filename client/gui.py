@@ -2991,9 +2991,11 @@ class FileBrowser:
         if not paths and not folder_entries:
             messagebox.showinfo("Nothing selected", "Select what to delete forever.")
             return
+        # Counted as the summary afterwards counts them (see _delete_forever).
+        count = max(len(paths), len([f for f in folder_entries if f != TRASH]))
         if not messagebox.askyesno(
             "Delete forever?",
-            f"Permanently delete {len(paths)} item(s) from the server?\n\n"
+            f"Permanently delete {count} item(s) from the server?\n\n"
             "This affects every machine and cannot be undone.",
             icon="warning",
             default="no",

@@ -10,6 +10,7 @@ env/
 # STORAGE_*_CONFIG names) stays local.
 .env
 .env.*
+!.env.example
 *.toml
 !*.example.toml
 *.bak
@@ -18,6 +19,7 @@ env/
 data/
 logs/*
 !logs/.gitkeep
+*.log
 *.db
 *.db-journal
 *.db-wal
@@ -34,8 +36,13 @@ dist/
 *.keystore
 keystore.properties
 
+# Android build outputs copied outside android/
+*.apk
+*.aab
+
 # IDE (Android Studio / JetBrains opened at the repo root)
 .idea/
+*.iml
 
 # OS junk
 .DS_Store

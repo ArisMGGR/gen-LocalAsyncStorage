@@ -137,6 +137,7 @@
     <string name="choose_folder_msg">Pick a folder to save downloads into (for example, create one under Documents). You can browse it in the Files app, and it stays out of shared media.</string>
     <string name="choose">Choose</string>
     <string name="folder_set">Downloads will be saved in \'%s\'.</string>
+    <string name="change_download_folder">Change download folder</string>
 
     <!-- background transfers / notification -->
     <string name="tasks_idle">Tasks ▲</string>

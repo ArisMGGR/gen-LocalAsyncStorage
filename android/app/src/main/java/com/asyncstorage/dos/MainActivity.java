@@ -933,9 +933,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
     private void confirmDeleteForeverFolder(String folder) {
         List<FileEntry> under = filesUnder(folder);
         List<String> folderEntries = subFolderEntries(java.util.Collections.singletonList(folder));
+        // Counted as the summary afterwards counts them (see doDeleteForever).
+        int folderCount = 0;
+        for (String f : folderEntries) if (!f.equals(TRASH)) folderCount++;
         new AlertDialog.Builder(this)
                 .setTitle(R.string.delete_forever_title)
-                .setMessage(getString(R.string.delete_forever_msg_n, under.size()))
+                .setMessage(getString(R.string.delete_forever_msg_n,
+                        Math.max(under.size(), folderCount)))
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton(R.string.delete_forever, (d, w) -> doDeleteForever(under, folderEntries))
                 .show();
@@ -1940,9 +1944,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
             Toast.makeText(this, R.string.select_first, Toast.LENGTH_SHORT).show();
             return;
         }
+        // Counted as the summary afterwards counts them (see doDeleteForever).
+        int folderCount = 0;
+        for (String f : folderEntries) if (!f.equals(TRASH)) folderCount++;
         new AlertDialog.Builder(this)
                 .setTitle(R.string.delete_forever_title)
-                .setMessage(getString(R.string.delete_forever_msg_n, items.size()))
+                .setMessage(getString(R.string.delete_forever_msg_n,
+                        Math.max(items.size(), folderCount)))
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton(R.string.delete_forever, (d, w) -> doDeleteForever(items, folderEntries))
                 .show();
@@ -2201,6 +2209,16 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.Liste
                 Toast.makeText(this, R.string.settings_locked, Toast.LENGTH_LONG).show();
             } else {
                 openSettings();
+            }
+            return true;
+        }
+        if (id == R.id.menu_download_folder) {
+            // As the desktop's Settings does, and locked as it is: a queued
+            // download's clash answers were given for the folder it was asked in.
+            if (currentTransferId >= 0 || queueLabels.length > 0) {
+                Toast.makeText(this, R.string.settings_locked, Toast.LENGTH_LONG).show();
+            } else {
+                launchFolderPicker();
             }
             return true;
         }
